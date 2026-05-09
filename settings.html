@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - FDSS Dashboard</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.0/font/bootstrap-icons.min.css" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link href="assets/css/styles.css" rel="stylesheet">
+</head>
+<body>
+    <div id="navbar-placeholder"></div>
+
+    <div class="sidebar-container">
+        <div id="sidebar-placeholder"></div>
+
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+            <!-- PAGE HEADER -->
+            <div class="page-header">
+                <div>
+                    <h1>Settings</h1>
+                    <p class="page-header-subtitle">
+                        <a href="index.html" class="text-primary text-decoration-none">Dashboard</a>
+                        <span class="text-muted"> / </span>Settings
+                    </p>
+                </div>
+            </div>
+
+            <!-- TABS -->
+            <div class="content-card">
+                <div class="card-header" style="border-bottom: none; padding-bottom: 0;">
+                    <ul class="nav nav-tabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" data-bs-toggle="tab" href="#profileTab">
+                                <i class="bi bi-person-circle"></i> User Profile
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#passwordTab">
+                                <i class="bi bi-key"></i> Change Password
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- TAB CONTENT -->
+                <div class="tab-content">
+                    <!-- USER PROFILE TAB -->
+                    <div id="profileTab" class="tab-pane fade show active">
+                        <div class="card-body">
+                            <form id="profileForm">
+                                <h6 class="mb-4" style="font-weight: 600; text-transform: uppercase; color: #2c3e50;">
+                                    <i class="bi bi-person-circle me-2"></i>My Profile Information
+                                </h6>
+
+                                <!-- Profile Photo -->
+                                <div class="row g-3 mb-4">
+                                    <div class="col-12">
+                                        <div style="display: flex; align-items: center; gap: 20px;">
+                                            <div style="width: 100px; height: 100px; border-radius: 50%; background: #e9ecef; display: flex; align-items: center; justify-content: center; border: 2px solid #dee2e6;">
+                                                <i class="bi bi-person-fill" style="font-size: 3rem; color: #6c757d;"></i>
+                                            </div>
+                                            <div>
+                                                <button type="button" class="btn btn-sm btn-primary" onclick="document.getElementById('profilePhoto').click()">
+                                                    <i class="bi bi-cloud-upload"></i> Upload Photo
+                                                </button>
+                                                <input type="file" id="profilePhoto" accept="image/*" style="display: none;">
+                                                <p class="text-muted small mt-2">JPG, PNG or GIF (Max 5MB)</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <hr>
+
+                                <!-- Personal Information -->
+                                <h6 class="mb-3 mt-4" style="font-weight: 600; text-transform: uppercase; color: #2c3e50;">Personal Information</h6>
+
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label class="form-label fw-semibold">Full Name</label>
+                                            <input type="text" class="form-control" value="Ramesh Kumar" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label class="form-label fw-semibold">Employee ID</label>
+                                            <input type="text" class="form-control" value="AUD-001" disabled>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label class="form-label fw-semibold">Email Address</label>
+                                            <input type="email" class="form-control" value="ramesh.kumar@irctc.co.in" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label class="form-label fw-semibold">Phone Number</label>
+                                            <input type="tel" class="form-control" value="+91-9876543210" placeholder="+91-XXXXXXXXXX">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label class="form-label fw-semibold">Designation</label>
+                                            <input type="text" class="form-control" value="Senior Auditor">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label class="form-label fw-semibold">Department</label>
+                                            <input type="text" class="form-control" value="FDSS Operations">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label class="form-label fw-semibold">Station / Zone</label>
+                                            <input type="text" class="form-control" value="New Delhi Junction">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label class="form-label fw-semibold">Role</label>
+                                            <input type="text" class="form-control" value="Auditor" disabled>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <hr>
+
+                                <h6 class="mb-3 mt-4" style="font-weight: 600; text-transform: uppercase; color: #2c3e50;">Account Information</h6>
+
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label class="form-label fw-semibold">Last Login</label>
+                                            <input type="text" class="form-control" value="09 May 2026, 09:45 AM" disabled>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label class="form-label fw-semibold">Account Status</label>
+                                            <div class="input-group">
+                                                <span class="input-group-text" style="background: #d1e7dd; border-color: #badbcc;">
+                                                    <i class="bi bi-check-circle-fill" style="color: #0a3622;"></i>
+                                                </span>
+                                                <input type="text" class="form-control" value="Active" disabled>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4">
+                                    <button type="submit" class="btn btn-primary" onclick="saveProfile(event)">
+                                        <i class="bi bi-save"></i> Save Changes
+                                    </button>
+                                    <button type="reset" class="btn btn-secondary">
+                                        <i class="bi bi-arrow-clockwise"></i> Reset
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- CHANGE PASSWORD TAB -->
+                    <div id="passwordTab" class="tab-pane fade">
+                        <div class="card-body">
+                            <form id="passwordForm">
+                                <h6 class="mb-4" style="font-weight: 600; text-transform: uppercase; color: #2c3e50;">
+                                    <i class="bi bi-key me-2"></i>Change Your Password
+                                </h6>
+
+                                <div class="alert alert-info" role="alert">
+                                    <i class="bi bi-info-circle me-2"></i>
+                                    Password must be at least 8 characters long and contain uppercase, lowercase, numbers, and special characters.
+                                </div>
+
+                                <div class="row g-3 mb-4" style="max-width: 500px;">
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label class="form-label fw-semibold">Current Password</label>
+                                            <div class="input-group">
+                                                <input type="password" class="form-control" id="currentPassword" placeholder="Enter your current password" required>
+                                                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('currentPassword')">
+                                                    <i class="bi bi-eye"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label class="form-label fw-semibold">New Password</label>
+                                            <div class="input-group">
+                                                <input type="password" class="form-control" id="newPassword" placeholder="Enter new password" required>
+                                                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('newPassword')">
+                                                    <i class="bi bi-eye"></i>
+                                                </button>
+                                            </div>
+                                            <div id="passwordStrength" style="margin-top: 8px; font-size: 0.85rem;">
+                                                <div style="height: 4px; background: #e9ecef; border-radius: 2px; margin-bottom: 4px;">
+                                                    <div id="strengthBar" style="height: 100%; width: 0%; background: #dc3545; border-radius: 2px; transition: all 0.3s ease;"></div>
+                                                </div>
+                                                <small id="strengthText" class="text-muted">Strength: Weak</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label class="form-label fw-semibold">Confirm New Password</label>
+                                            <div class="input-group">
+                                                <input type="password" class="form-control" id="confirmPassword" placeholder="Confirm new password" required>
+                                                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('confirmPassword')">
+                                                    <i class="bi bi-eye"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12 mt-3">
+                                        <div id="passwordMatch" class="d-none">
+                                            <div class="alert alert-danger" id="mismatchAlert">
+                                                <i class="bi bi-exclamation-circle me-2"></i>Passwords do not match
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4">
+                                    <button type="submit" class="btn btn-primary" onclick="changePassword(event)">
+                                        <i class="bi bi-save"></i> Change Password
+                                    </button>
+                                    <button type="reset" class="btn btn-secondary">
+                                        <i class="bi bi-arrow-clockwise"></i> Reset
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="footer-placeholder"></div>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JS -->
+    <script src="assets/js/layout.js"></script>
+
+    <script>
+        /* ──────────────────────────────────────────
+           Toggle password visibility
+        ────────────────────────────────────────── */
+        function togglePassword(fieldId) {
+            const field = document.getElementById(fieldId);
+            if (field.type === 'password') {
+                field.type = 'text';
+            } else {
+                field.type = 'password';
+            }
+        }
+
+        /* ──────────────────────────────────────────
+           Check password strength
+        ────────────────────────────────────────── */
+        document.getElementById('newPassword')?.addEventListener('input', function() {
+            const password = this.value;
+            let strength = 0;
+            let strengthText = 'Weak';
+            let color = '#dc3545';
+
+            // Length check
+            if (password.length >= 8) strength++;
+            if (password.length >= 12) strength++;
+
+            // Character type checks
+            if (/[a-z]/.test(password)) strength++;
+            if (/[A-Z]/.test(password)) strength++;
+            if (/[0-9]/.test(password)) strength++;
+            if (/[^a-zA-Z0-9]/.test(password)) strength++;
+
+            // Calculate percentage and color
+            const percentage = (strength / 6) * 100;
+            if (percentage < 40) {
+                strengthText = 'Weak';
+                color = '#dc3545';
+            } else if (percentage < 70) {
+                strengthText = 'Fair';
+                color = '#ffc107';
+            } else if (percentage < 90) {
+                strengthText = 'Good';
+                color = '#20c997';
+            } else {
+                strengthText = 'Strong';
+                color = '#198754';
+            }
+
+            document.getElementById('strengthBar').style.width = percentage + '%';
+            document.getElementById('strengthBar').style.background = color;
+            document.getElementById('strengthText').textContent = `Strength: ${strengthText}`;
+        });
+
+        /* ──────────────────────────────────────────
+           Check password match
+        ────────────────────────────────────────── */
+        document.getElementById('confirmPassword')?.addEventListener('input', function() {
+            const newPass = document.getElementById('newPassword').value;
+            const confirmPass = this.value;
+            const matchDiv = document.getElementById('passwordMatch');
+
+            if (confirmPass && newPass !== confirmPass) {
+                matchDiv.classList.remove('d-none');
+            } else {
+                matchDiv.classList.add('d-none');
+            }
+        });
+
+        /* ──────────────────────────────────────────
+           Save profile changes
+        ────────────────────────────────────────── */
+        function saveProfile(e) {
+            e.preventDefault();
+            const form = document.getElementById('profileForm');
+            
+            // Show success message
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show';
+            alert.innerHTML = `
+                <i class="bi bi-check-circle me-2"></i>
+                <strong>Success!</strong> Your profile has been updated successfully.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            form.parentElement.insertBefore(alert, form);
+
+            // Auto-dismiss after 4 seconds
+            setTimeout(() => alert.remove(), 4000);
+        }
+
+        /* ──────────────────────────────────────────
+           Change password
+        ────────────────────────────────────────── */
+        function changePassword(e) {
+            e.preventDefault();
+            const currentPass = document.getElementById('currentPassword').value;
+            const newPass = document.getElementById('newPassword').value;
+            const confirmPass = document.getElementById('confirmPassword').value;
+
+            // Validation
+            if (!currentPass || !newPass || !confirmPass) {
+                alert('Please fill in all password fields');
+                return;
+            }
+
+            if (newPass !== confirmPass) {
+                alert('New passwords do not match');
+                return;
+            }
+
+            if (newPass.length < 8) {
+                alert('Password must be at least 8 characters long');
+                return;
+            }
+
+            // Mock validation: accept any non-empty current password for demo
+            const form = document.getElementById('passwordForm');
+            
+            // Show success message
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show';
+            alert.innerHTML = `
+                <i class="bi bi-check-circle me-2"></i>
+                <strong>Success!</strong> Your password has been changed successfully.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            form.parentElement.insertBefore(alert, form);
+
+            // Clear form
+            form.reset();
+            document.getElementById('passwordMatch').classList.add('d-none');
+            document.getElementById('strengthBar').style.width = '0%';
+            document.getElementById('strengthText').textContent = 'Strength: Weak';
+
+            // Auto-dismiss after 4 seconds
+            setTimeout(() => alert.remove(), 4000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coach Inventory Details - FDSS Dashboard</title>
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.0/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="assets/css/styles.css" rel="stylesheet">
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+
+<div class="sidebar-container">
+    <div id="sidebar-placeholder"></div>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1>Coach Inventory Detail</h1>
+                <p class="page-header-subtitle">Inventory and expiry status for selected coach</p>
+            </div>
+            <div class="page-header-actions">
+                <button class="btn btn-primary" id="addInventoryBtn" data-bs-toggle="modal" data-bs-target="#inventoryModal">
+                    <i class="bi bi-plus-circle"></i> Add Coach Inventory
+                </button>
+                <a class="btn btn-primary" href="coaches.html">
+                    <i class="bi bi-arrow-left"></i> Back To Coaches
+                </a>
+            </div>
+        </div>
+
+        <div class="content-card">
+            <div class="card-header">
+                <h5>Coach Detail Summary</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-lg-3 col-md-6">
+                        <div class="quick-box">
+                            <h6>Coach Number</h6>
+                            <p><strong>NR-193452</strong></p>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6">
+                        <div class="quick-box">
+                            <h6>Assigned Train</h6>
+                            <p><strong>12004 - Shatabdi Express</strong></p>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6">
+                        <div class="quick-box">
+                            <h6>Coach Type</h6>
+                            <p><strong>AC 2-Tier (A1)</strong></p>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6">
+                        <div class="quick-box">
+                            <h6>Overall FDSS Status</h6>
+                            <p><span class="badge badge-success">Passed</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-card">
+            <div class="card-header">
+                <h5>Inventory Items Installed in NR-193452</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-wrapper">
+                    <table class="table table-hover">
+                        <thead>
+                        <tr>
+                            <th>Tool Name</th>
+                            <th>Manufacturer / Company</th>
+                            <th>Model Number</th>
+                            <th>Serial Number</th>
+                            <th>Assigned Coach</th>
+                            <th>Installed Date</th>
+                            <th>Expiry Date</th>
+                            <th>Last Service Date</th>
+                            <th>Next Service Date</th>
+                            <th>Remarks</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr>
+                            <td>Fire Extinguisher (DCP)</td>
+                            <td>Minimax</td>
+                            <td>DCP-6KG</td>
+                            <td>MX-2022-8492</td>
+                            <td>NR-193452 (Train: 12004 - Shatabdi)</td>
+                            <td>12 Jan 2023</td>
+                            <td>12 Jan 2026</td>
+                            <td>15 Dec 2023</td>
+                            <td>15 Jun 2024</td>
+                            <td>Pin intact, pressure gauge normal. Checked during weekly audit.</td>
+                            <td><span class="badge badge-success">Active</span></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary edit-inventory-btn" data-bs-toggle="modal" data-bs-target="#inventoryModal"><i class="bi bi-pencil"></i></button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Smoke Detector</td>
+                            <td>Apollo</td>
+                            <td>Series 65</td>
+                            <td>AP-8849-001</td>
+                            <td>NR-193452 (Train: 12004 - Shatabdi)</td>
+                            <td>05 Mar 2022</td>
+                            <td>05 Mar 2024</td>
+                            <td>10 Jan 2024</td>
+                            <td>10 Jul 2024</td>
+                            <td>Sensor reached end-of-life, replacement due.</td>
+                            <td><span class="badge badge-danger">Expired</span></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary edit-inventory-btn" data-bs-toggle="modal" data-bs-target="#inventoryModal"><i class="bi bi-pencil"></i></button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Emergency Window Hammer</td>
+                            <td>SafeEscape</td>
+                            <td>Pro</td>
+                            <td>N/A</td>
+                            <td>NR-193452 (Train: 12004 - Shatabdi)</td>
+                            <td>10 Aug 2021</td>
+                            <td>Lifelong</td>
+                            <td>20 Feb 2024</td>
+                            <td>20 Aug 2024</td>
+                            <td>Bracket and seal condition verified.</td>
+                            <td><span class="badge badge-success">Active</span></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary edit-inventory-btn" data-bs-toggle="modal" data-bs-target="#inventoryModal"><i class="bi bi-pencil"></i></button>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<div class="modal fade" id="inventoryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="inventoryModalTitle">Add Coach Inventory</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="inventoryForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Tool Name</label>
+                        <input type="text" class="form-control" id="toolName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Manufacturer / Company</label>
+                        <input type="text" class="form-control" id="manufacturer" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Model Number</label>
+                        <input type="text" class="form-control" id="modelNumber" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Serial Number</label>
+                        <input type="text" class="form-control" id="serialNumber" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Assigned Coach</label>
+                        <input type="text" class="form-control" id="assignedCoach" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Installed Date</label>
+                        <input type="text" class="form-control" id="installedDate" placeholder="DD MMM YYYY" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Expiry Date</label>
+                        <input type="text" class="form-control" id="expiryDate" placeholder="DD MMM YYYY / Lifelong" required>
+                    </div>
+                     <div class="mb-3">
+                        <label class="form-label">Last Service Date</label>
+                        <input type="text" class="form-control" id="lastServiceDate" placeholder="DD MMM YYYY" required>
+                    </div>
+                     <div class="mb-3">
+                        <label class="form-label">Next Service Date</label>
+                        <input type="text" class="form-control" id="nextServiceDate" placeholder="DD MMM YYYY" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Remarks</label>
+                        <textarea class="form-control" id="remarks" rows="3" required></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Status</label>
+                        <select class="form-select" id="inventoryStatus" required>
+                            <option value="Active">Active</option>
+                            <option value="Expired">Expired</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="inventorySubmitBtn">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div id="footer-placeholder"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+<script src="assets/js/layout.js"></script>
+<script>
+    const inventoryModalTitle = document.getElementById('inventoryModalTitle');
+    const inventoryForm = document.getElementById('inventoryForm');
+    const inventorySubmitBtn = document.getElementById('inventorySubmitBtn');
+    const addInventoryBtn = document.getElementById('addInventoryBtn');
+    const inventoryTableBody = document.querySelector('table.table tbody');
+    let editingRow = null;
+
+    function fillInventoryFormFromRow(row) {
+        const cells = row.querySelectorAll('td');
+        document.getElementById('toolName').value = cells[0].innerText.trim();
+        document.getElementById('manufacturer').value = cells[1].innerText.trim();
+        document.getElementById('modelNumber').value = cells[2].innerText.trim();
+        document.getElementById('serialNumber').value = cells[3].innerText.trim();
+        document.getElementById('assignedCoach').value = cells[4].innerText.trim();
+        document.getElementById('installedDate').value = cells[5].innerText.trim();
+        document.getElementById('expiryDate').value = cells[6].innerText.trim();
+        document.getElementById('lastServiceDate').value = cells[7].innerText.trim();
+        document.getElementById('nextServiceDate').value = cells[8].innerText.trim();
+        document.getElementById('remarks').value = cells[9].innerText.trim();
+        const statusText = cells[10].innerText.trim();
+        document.getElementById('inventoryStatus').value = statusText === 'Expired' ? 'Expired' : 'Active';
+    }
+
+    function clearInventoryForm() {
+        inventoryForm.reset();
+        document.getElementById('assignedCoach').value = 'NR-193452 (Train: 12004 - Shatabdi)';
+        document.getElementById('inventoryStatus').value = 'Active';
+    }
+
+    function actionCellHtml() {
+        return '<button class="btn btn-sm btn-outline-primary edit-inventory-btn" data-bs-toggle="modal" data-bs-target="#inventoryModal"><i class="bi bi-pencil"></i></button>';
+    }
+
+    function bindRowEditButton(btn) {
+        btn.addEventListener('click', function() {
+            editingRow = btn.closest('tr');
+            fillInventoryFormFromRow(editingRow);
+            inventoryModalTitle.textContent = 'Edit Coach Inventory';
+            inventorySubmitBtn.textContent = 'Update Inventory';
+        });
+    }
+
+    addInventoryBtn.addEventListener('click', function() {
+        editingRow = null;
+        clearInventoryForm();
+        inventoryModalTitle.textContent = 'Add Coach Inventory';
+        inventorySubmitBtn.textContent = 'Add Inventory';
+    });
+
+    document.querySelectorAll('.edit-inventory-btn').forEach((btn) => bindRowEditButton(btn));
+
+    inventoryForm.addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const toolName = document.getElementById('toolName').value.trim();
+        const manufacturer = document.getElementById('manufacturer').value.trim();
+        const modelNumber = document.getElementById('modelNumber').value.trim();
+        const serialNumber = document.getElementById('serialNumber').value.trim();
+        const assignedCoach = document.getElementById('assignedCoach').value.trim();
+        const installedDate = document.getElementById('installedDate').value.trim();
+        const expiryDate = document.getElementById('expiryDate').value.trim();
+        const lastServiceDate = document.getElementById('lastServiceDate').value.trim();
+        const nextServiceDate = document.getElementById('nextServiceDate').value.trim();
+        const remarks = document.getElementById('remarks').value.trim();
+        const status = document.getElementById('inventoryStatus').value;
+        const badgeClass = status === 'Expired' ? 'badge-danger' : 'badge-success';
+
+        if (editingRow) {
+            const cells = editingRow.querySelectorAll('td');
+            cells[0].innerText = toolName;
+            cells[1].innerText = manufacturer;
+            cells[2].innerText = modelNumber;
+            cells[3].innerText = serialNumber;
+            cells[4].innerText = assignedCoach;
+            cells[5].innerText = installedDate;
+            cells[6].innerText = expiryDate;
+            cells[7].innerText = lastServiceDate;
+            cells[8].innerText = nextServiceDate;
+            cells[9].innerText = remarks;
+            cells[10].innerHTML = '<span class="badge ' + badgeClass + '">' + status + '</span>';
+            alert('Inventory details updated successfully.');
+        } else {
+            const newRow = document.createElement('tr');
+            newRow.innerHTML =
+                '<td>' + toolName + '</td>' +
+                '<td>' + manufacturer + '</td>' +
+                '<td>' + modelNumber + '</td>' +
+                '<td>' + serialNumber + '</td>' +
+                '<td>' + assignedCoach + '</td>' +
+                '<td>' + installedDate + '</td>' +
+                '<td>' + expiryDate + '</td>' +
+                '<td>' + lastServiceDate + '</td>' +
+                '<td>' + nextServiceDate + '</td>' +
+                '<td>' + remarks + '</td>' +
+                '<td><span class="badge ' + badgeClass + '">' + status + '</span></td>' +
+                '<td>' + actionCellHtml() + '</td>';
+            inventoryTableBody.appendChild(newRow);
+            const newEditBtn = newRow.querySelector('.edit-inventory-btn');
+            if (newEditBtn) bindRowEditButton(newEditBtn);
+            alert('Inventory added successfully.');
+        }
+
+        bootstrap.Modal.getInstance(document.getElementById('inventoryModal')).hide();
+    });
+</script>
+</body>
+</html>
