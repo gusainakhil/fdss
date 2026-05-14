@@ -1,5 +1,5 @@
 function setActiveSidebarLink() {
-    const currentPath = window.location.pathname.split('/').pop() || 'index.html';
+    const currentPath = window.location.pathname.split('/').pop() || 'index.php';
     const sidebarLinks = document.querySelectorAll('.sidebar-menu a');
 
     sidebarLinks.forEach((link) => {
@@ -56,9 +56,9 @@ async function loadPartial(targetId, partialPath) {
 
 async function loadLayout() {
     await Promise.all([
-        loadPartial('navbar-placeholder', 'includes/navbar.html'),
-        loadPartial('sidebar-placeholder', 'includes/sidebar.html'),
-        loadPartial('footer-placeholder', 'includes/footer.html')
+        loadPartial('navbar-placeholder', 'includes/navbar.php'),
+        loadPartial('sidebar-placeholder', 'includes/sidebar.php'),
+        loadPartial('footer-placeholder', 'includes/footer.php')
     ]);
 
     setActiveSidebarLink();

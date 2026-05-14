@@ -1,3 +1,56 @@
+<?php
+session_start();
+require_once 'config/db.php';
+
+$login_error = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $username = $conn->real_escape_string($_POST['username']);
+    $password = $_POST['password'];
+    
+    // Query the database for user
+    $query = "SELECT user_id, username, password_hash, role, status FROM fdss_users WHERE username = ?";
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows === 1) {
+        $user = $result->fetch_assoc();
+        
+        // Verify password using bcrypt
+        if (password_verify($password, $user['password_hash'])) {
+            // Check if user is active
+            if ($user['status'] === 'Active') {
+                // Create session
+                $_SESSION['user_id'] = $user['user_id'];
+                $_SESSION['username'] = $user['username'];
+                $_SESSION['role'] = $user['role'];
+                $_SESSION['login_time'] = time();
+                
+                // Role-based redirection
+                if ($user['role'] === 'SUPER_ADMIN' || $user['role'] === 'ADMIN') {
+                    header('Location: admin/index.php');
+                    exit;
+                } elseif ($user['role'] === 'ORG_ADMIN') {
+                    header('Location: index.php');
+                    exit;
+                } else {
+                    $login_error = 'Your role (' . htmlspecialchars($user['role']) . ') is not correct to access this system. Only ORG_ADMIN can access the main dashboard.';
+                }
+            } else {
+                $login_error = 'Your account is inactive. Please contact administrator.';
+            }
+        } else {
+            $login_error = 'Invalid username or password.';
+        }
+    } else {
+        $login_error = 'Invalid username or password.';
+    }
+    
+    $stmt->close();
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -17,7 +70,7 @@
                     <div class="logo-icon">
                         <i class="bi bi-train-front-fill"></i>
                     </div>
-                    <h1>FDSS</h1>
+                    <h1>FDSS / FSDS</h1>
                     <p class="brand-subtitle">Indian Railways</p>
                     <p class="brand-description">Station Level Monitoring System</p>
                 </div>
@@ -41,9 +94,35 @@
             <div class="login-right">
                 <div class="login-form-container">
                     <h2>Welcome Back</h2>
-                    <p class="login-subtitle">Sign in to your FDSS account</p>
+                    <p class="login-subtitle">Sign in to your FDSS / FSDS account</p>
 
-                    <form id="loginForm" class="login-form">
+                    <?php if ($login_error): ?>
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <i class="bi bi-exclamation-circle-fill"></i>
+                            <strong>Login Failed!</strong> <?php echo htmlspecialchars($login_error); ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if (isset($_GET['logout']) && $_GET['logout'] === 'success'): ?>
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <i class="bi bi-check-circle-fill"></i>
+                            <strong>Logged Out!</strong> You have been successfully logged out.
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if (isset($_GET['access']) && $_GET['access'] === 'denied'): ?>
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <i class="bi bi-exclamation-circle-fill"></i>
+                            <strong>Access Denied!</strong> 
+                            Your role (<?php echo htmlspecialchars($_GET['role'] ?? 'Unknown'); ?>) does not have permission to access this dashboard. 
+                            Only ORG_ADMIN users can access this dashboard. Please contact your administrator.
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    <?php endif; ?>
+
+                    <form method="POST" action="" class="login-form">
                         <div class="form-group">
                             <label for="username" class="form-label">
                                 <i class="bi bi-person-fill"></i> Username
@@ -97,7 +176,7 @@
 
                     <div class="alert-info">
                         <i class="bi bi-info-circle-fill"></i>
-                        <span>Demo credentials: admin / password123</span>
+                        <span>Demo: beatle/123456 or admin/123456 or kings/123456</span>
                     </div>
                 </div>
             </div>
@@ -117,23 +196,9 @@
             icon.classList.toggle('bi-eye-fill');
             icon.classList.toggle('bi-eye-slash-fill');
         });
-
-        // Handle login form submission
-        document.getElementById('loginForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            
-            // Simple validation for demo purposes
-            if (username === 'admin' && password === 'password123') {
-                alert('Login successful! Redirecting to dashboard...');
-                // Redirect to dashboard
-                window.location.href = 'index.html';
-            } else {
-                alert('Invalid username or password. Try admin/password123');
-            }
-        });
     </script>
 </body>
 </html>
+<?php
+$conn->close();
+?>

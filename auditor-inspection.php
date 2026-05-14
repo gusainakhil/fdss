@@ -260,10 +260,12 @@
     </style>
 </head>
 <body>
-    <div id="navbar-placeholder"></div>
+<?php include('includes/navbar.php'); ?>
+<!-- <div id="navbar-placeholder"></div> -->
 
-    <div class="sidebar-container">
-        <div id="sidebar-placeholder"></div>
+<div class="sidebar-container">
+    <!-- <div id="sidebar-placeholder"></div> -->
+    <?php include('includes/sidebar.php'); ?>
 
         <!-- MAIN CONTENT -->
         <main class="main-content">
@@ -273,7 +275,7 @@
                 <div>
                     <h1>Auditor Inspection Report</h1>
                     <p class="page-header-subtitle">
-                        <a href="index.html" class="text-primary text-decoration-none">Dashboard</a>
+                        <a href="index.php" class="text-primary text-decoration-none">Dashboard</a>
                         <span class="text-muted"> / </span>Inspection Report
                     </p>
                 </div>
@@ -368,10 +370,10 @@
                         <div class="text-center mb-3" style="border-bottom:2px solid #333; padding-bottom:10px;">
                             <!-- IR wheel emblem (print-friendly SVG) -->
                             <div class="mb-1">
-                                <!-- <svg width="52" height="52" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;">
+                                <svg width="52" height="52" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;">
                                     <circle cx="50" cy="50" r="46" fill="none" stroke="#333" stroke-width="4"/>
                                     <circle cx="50" cy="50" r="10" fill="#333"/>
-                                    
+                                    <!-- 12 spokes -->
                                     <g stroke="#333" stroke-width="3">
                                         <line x1="50" y1="4" x2="50" y2="40"/>
                                         <line x1="50" y1="60" x2="50" y2="96"/>
@@ -385,8 +387,8 @@
                                         <line x1="61.8" y1="55.2" x2="92.3" y2="70.7"/>
                                         <line x1="29.3" y1="7.7" x2="44.8" y2="38.2"/>
                                         <line x1="55.2" y1="61.8" x2="70.7" y2="92.3"/>
-                                    </g>
-                                </svg> -->
+                                    </g> 
+                                </svg>
                             </div>
                             <div class="report-header-title">Indian Railways</div>
                             <div style="font-size:1rem; font-weight:600; letter-spacing:0.5px; margin-top:2px;">Fire Detection &amp; Suppression System (FDSS)</div>
@@ -554,7 +556,9 @@
         </main>
     </div>
 
-    <div id="footer-placeholder"></div>
+           <?php include('includes/footer.php'); ?>
+
+    <!-- <div id="footer-placeholder"></div> -->
 
     <!-- Bootstrap 5 JS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>

@@ -1,0 +1,470 @@
+<?php
+session_start();
+require_once 'config/db.php';
+
+mysqli_report(MYSQLI_REPORT_OFF);
+
+if (!isset($_SESSION['user_id'])) {
+    header('Location: login.php');
+    exit;
+}
+
+$user_id = (int) $_SESSION['user_id'];
+$message = '';
+$message_type = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'add_coach') {
+        $train_info_id = (int) ($_POST['train_info_id'] ?? 0);
+        $coach_no = trim($_POST['coach_no'] ?? '');
+        $coach_type = trim($_POST['coach_type'] ?? '');
+        $status = $_POST['status'] ?? 'Active';
+        $next_inspection_date = !empty($_POST['next_inspection_date']) ? $_POST['next_inspection_date'] : null;
+
+        if ($train_info_id <= 0 || $coach_no === '') {
+            $message = "Please fill all required fields.";
+            $message_type = "danger";
+        } else {
+            $check_query = "SELECT coach_id FROM fdss_train_coach WHERE train_info_id = ? AND coach_no = ?";
+            $check_stmt = $conn->prepare($check_query);
+            $check_stmt->bind_param("is", $train_info_id, $coach_no);
+            $check_stmt->execute();
+            $check_result = $check_stmt->get_result();
+
+            if ($check_result->num_rows > 0) {
+                $message = "This coach already exists for selected train.";
+                $message_type = "danger";
+            } else {
+                $insert_query = "INSERT INTO fdss_train_coach 
+                    (train_info_id, coach_no, coach_type, user_id, status, next_inspection_date)
+                    VALUES (?, ?, ?, ?, ?, ?)";
+
+                $stmt = $conn->prepare($insert_query);
+                $stmt->bind_param("ississ", $train_info_id, $coach_no, $coach_type, $user_id, $status, $next_inspection_date);
+
+                if ($stmt->execute()) {
+                    $message = "Coach added successfully!";
+                    $message_type = "success";
+                } else {
+                    $message = "Error adding coach.";
+                    $message_type = "danger";
+                }
+
+                $stmt->close();
+            }
+
+            $check_stmt->close();
+        }
+    }
+
+    elseif ($action === 'edit_coach') {
+        $coach_id = (int) ($_POST['coach_id'] ?? 0);
+        $train_info_id = (int) ($_POST['train_info_id'] ?? 0);
+        $coach_no = trim($_POST['coach_no'] ?? '');
+        $coach_type = trim($_POST['coach_type'] ?? '');
+        $status = $_POST['status'] ?? 'Active';
+        $next_inspection_date = !empty($_POST['next_inspection_date']) ? $_POST['next_inspection_date'] : null;
+
+        $check_query = "SELECT coach_id FROM fdss_train_coach 
+                        WHERE train_info_id = ? AND coach_no = ? AND coach_id != ?";
+        $check_stmt = $conn->prepare($check_query);
+        $check_stmt->bind_param("isi", $train_info_id, $coach_no, $coach_id);
+        $check_stmt->execute();
+        $check_result = $check_stmt->get_result();
+
+        if ($check_result->num_rows > 0) {
+            $message = "This coach already exists for selected train.";
+            $message_type = "danger";
+        } else {
+            $update_query = "UPDATE fdss_train_coach 
+                SET train_info_id = ?, coach_no = ?, coach_type = ?, status = ?, next_inspection_date = ?
+                WHERE coach_id = ? AND user_id = ?";
+
+            $stmt = $conn->prepare($update_query);
+            $stmt->bind_param("issssii", $train_info_id, $coach_no, $coach_type, $status, $next_inspection_date, $coach_id, $user_id);
+
+            if ($stmt->execute()) {
+                $message = "Coach updated successfully!";
+                $message_type = "success";
+            } else {
+                $message = "Error updating coach.";
+                $message_type = "danger";
+            }
+
+            $stmt->close();
+        }
+
+        $check_stmt->close();
+    }
+
+    elseif ($action === 'delete_coach') {
+        $coach_id = (int) ($_POST['coach_id'] ?? 0);
+
+        $delete_query = "DELETE FROM fdss_train_coach WHERE coach_id = ? AND user_id = ?";
+        $stmt = $conn->prepare($delete_query);
+        $stmt->bind_param("ii", $coach_id, $user_id);
+
+        if ($stmt->execute()) {
+            $message = "Coach deleted successfully!";
+            $message_type = "success";
+        } else {
+            $message = "Error deleting coach. Inventory or schedule may be linked.";
+            $message_type = "danger";
+        }
+
+        $stmt->close();
+    }
+}
+
+$trains = [];
+$train_query = "SELECT train_info_id, train_no, train_name 
+                FROM fdss_train_information 
+                WHERE user_id = ? AND status = 'Active'
+                ORDER BY train_no ASC";
+
+$stmt = $conn->prepare($train_query);
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$train_result = $stmt->get_result();
+
+while ($row = $train_result->fetch_assoc()) {
+    $trains[] = $row;
+}
+
+$stmt->close();
+
+$selected_train = $_GET['train_info_id'] ?? 'all';
+
+$coaches = [];
+
+$query = "SELECT 
+            c.coach_id,
+            c.train_info_id,
+            c.coach_no,
+            c.coach_type,
+            c.status,
+            c.next_inspection_date,
+            t.train_no,
+            t.train_name,
+            COUNT(ci.coach_inventory_id) AS total_inventory,
+            SUM(CASE WHEN ci.status = 'Active' THEN 1 ELSE 0 END) AS active_inventory,
+            SUM(CASE WHEN ci.status = 'Expired' THEN 1 ELSE 0 END) AS expired_inventory,
+            SUM(CASE 
+                WHEN ci.expiry_date IS NOT NULL 
+                AND ci.expiry_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+                THEN 1 ELSE 0 
+            END) AS expire_soon
+          FROM fdss_train_coach c
+          INNER JOIN fdss_train_information t ON c.train_info_id = t.train_info_id
+          LEFT JOIN fdss_coach_inventory ci 
+            ON ci.train_info_id = c.train_info_id 
+            AND ci.coach_no = c.coach_no
+          WHERE c.user_id = ?";
+
+if ($selected_train !== 'all') {
+    $query .= " AND c.train_info_id = ?";
+}
+
+$query .= " GROUP BY c.coach_id ORDER BY c.coach_id DESC";
+
+$stmt = $conn->prepare($query);
+
+if ($selected_train !== 'all') {
+    $selected_train_id = (int) $selected_train;
+    $stmt->bind_param("ii", $user_id, $selected_train_id);
+} else {
+    $stmt->bind_param("i", $user_id);
+}
+
+$stmt->execute();
+$result = $stmt->get_result();
+
+while ($row = $result->fetch_assoc()) {
+    $coaches[] = $row;
+}
+
+$stmt->close();
+
+function e($value) {
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+}
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coach Management - FDSS Dashboard</title>
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.0/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="assets/css/styles.css" rel="stylesheet">
+</head>
+<body>
+
+<?php include('includes/navbar.php'); ?>
+
+<div class="sidebar-container">
+    <?php include('includes/sidebar.php'); ?>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1>Coach Management</h1>
+                <p class="page-header-subtitle">Manage coaches and track components status</p>
+            </div>
+            <div class="page-header-actions">
+                <button class="btn btn-primary" id="addCoachBtn" data-bs-toggle="modal" data-bs-target="#coachModal">
+                    <i class="bi bi-plus-circle"></i> Add Coach
+                </button>
+            </div>
+        </div>
+
+        <?php if ($message): ?>
+            <div class="alert alert-<?php echo e($message_type); ?> alert-dismissible fade show" role="alert">
+                <?php echo e($message); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        <?php endif; ?>
+
+        <div class="content-card">
+            <div class="card-body">
+                <form method="GET" class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label for="trainFilter" class="form-label">Select Train Number</label>
+                        <select id="trainFilter" name="train_info_id" class="form-select" onchange="this.form.submit()">
+                            <option value="all">All Trains</option>
+                            <?php foreach ($trains as $train): ?>
+                                <option value="<?php echo e($train['train_info_id']); ?>" 
+                                    <?php echo ((string)$selected_train === (string)$train['train_info_id']) ? 'selected' : ''; ?>>
+                                    <?php echo e($train['train_no'] . ' - ' . $train['train_name']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="content-card">
+            <div class="card-header">
+                <h5>
+                    <i class="bi bi-box-seam"></i>
+                    Coaches List (<?php echo count($coaches); ?> Total)
+                </h5>
+            </div>
+
+            <div class="card-body">
+                <div class="table-wrapper">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Coach No.</th>
+                                <th>Coach Type</th>
+                                <th>Train Assigned</th>
+                                <th>Total Components</th>
+                                <th>Active Components</th>
+                                <th>Expired Components</th>
+                                <th>Expire Soon</th>
+                                <th>Status Detached / Intact </th>
+                                <th>Next Inspection</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php if (empty($coaches)): ?>
+                            <tr>
+                                <td colspan="10" class="text-center text-muted py-4">
+                                    No coaches found. Click "Add Coach" to create one.
+                                </td>
+                            </tr>
+                        <?php else: ?>
+                            <?php foreach ($coaches as $coach): ?>
+                                <tr>
+                                    <td>
+                                        <a 
+                                            class=""
+                                            href="coach-inventory.php?train_info_id=<?php echo e($coach['train_info_id']); ?>&coach_no=<?php echo urlencode($coach['coach_no']); ?>">
+                                            <?php echo e($coach['coach_no']); ?>
+                                           
+                                        </a>
+                                    </td>
+                                    <td><?php echo e($coach['coach_type'] ?: '-'); ?></td>
+                                    <td><?php echo e($coach['train_no'] . ' - ' . $coach['train_name']); ?></td>
+                                    <td><?php echo e($coach['total_inventory'] ?? 0); ?></td>
+                                    <td><span class="badge badge-success"><?php echo e($coach['active_inventory'] ?? 0); ?></span></td>
+                                    <td><span class="badge badge-danger"><?php echo e($coach['expired_inventory'] ?? 0); ?></span></td>
+                                    <td><span class="badge badge-warning"><?php echo e($coach['expire_soon'] ?? 0); ?></span></td>
+                                    <td>
+                                        <?php $status_class = ($coach['status'] === 'Active') ? 'badge-success' : 'badge-danger'; ?>
+                                        <span class="badge <?php echo $status_class; ?>"><?php echo e($coach['status']); ?></span>
+                                    </td>
+                                    <td>
+                                        <?php echo $coach['next_inspection_date'] ? e(date('Y-m-d', strtotime($coach['next_inspection_date']))) : '-'; ?>
+                                    </td>
+                                    <td>
+                                        <!-- <a 
+                                            class="btn btn-sm btn-info"
+                                            href="coach-inventory.php?train_info_id=<?php echo e($coach['train_info_id']); ?>&coach_no=<?php echo urlencode($coach['coach_no']); ?>">
+                                            <i class="bi bi-box-seam"></i>
+                                        </a> -->
+
+                                        <button 
+                                            class="btn btn-sm btn-outline-primary"
+                                            onclick="editCoach(
+                                                '<?php echo e($coach['coach_id']); ?>',
+                                                '<?php echo e($coach['train_info_id']); ?>',
+                                                '<?php echo e($coach['coach_no']); ?>',
+                                                '<?php echo e($coach['coach_type']); ?>',
+                                                '<?php echo e($coach['status']); ?>',
+                                                '<?php echo e($coach['next_inspection_date']); ?>'
+                                            )"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#coachModal">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+
+                                        <!-- <button 
+                                            class="btn btn-sm btn-outline-danger"
+                                            onclick="deleteCoach('<?php echo e($coach['coach_id']); ?>')">
+                                            <i class="bi bi-trash"></i>
+                                        </button> -->
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<div class="modal fade" id="coachModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Coach</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form method="POST" action="">
+                <input type="hidden" name="action" id="formAction" value="add_coach">
+                <input type="hidden" name="coach_id" id="coachId" value="">
+
+                <div class="modal-body">
+                    <div class="form-group mb-3">
+                        <label class="form-label">Coach Number <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="coachNo" name="coach_no" placeholder="e.g., C-101" required>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label">Coach Type</label>
+                        <select class="form-select" id="coachType" name="coach_type">
+                            <option value="">Select Type</option>
+                            <option value="FDSS">FDSS</option>
+                            <option value="FSDS">FSDS</option>
+                            
+                        </select>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label">Train Assignment <span class="text-danger">*</span></label>
+                        <select class="form-select" id="trainInfoId" name="train_info_id" required>
+                            <option value="">Select Train</option>
+                            <?php foreach ($trains as $train): ?>
+                                <option value="<?php echo e($train['train_info_id']); ?>">
+                                    <?php echo e($train['train_no'] . ' - ' . $train['train_name']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label">Status <span class="text-danger">*</span></label>
+                        <select class="form-select" id="coachStatus" name="status" required>
+                            <option value="Active">Active</option>
+                            <option value="Inactive">Inactive</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label">Next Inspection Date</label>
+                        <input type="date" class="form-control" id="nextInspectionDate" name="next_inspection_date">
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="submitCoachBtn">Add Coach</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<form method="POST" id="deleteForm" style="display:none;">
+    <input type="hidden" name="action" value="delete_coach">
+    <input type="hidden" name="coach_id" id="deleteCoachId">
+</form>
+
+<?php include('includes/footer.php'); ?>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+<script src="assets/js/layout.js"></script>
+
+<script>
+const coachModalEl = document.getElementById('coachModal');
+const addCoachBtn = document.getElementById('addCoachBtn');
+const modalTitle = coachModalEl.querySelector('.modal-title');
+const submitCoachBtn = document.getElementById('submitCoachBtn');
+const formAction = document.getElementById('formAction');
+
+function resetCoachForm() {
+    document.getElementById('coachId').value = '';
+    document.getElementById('coachNo').value = '';
+    document.getElementById('coachType').value = '';
+    document.getElementById('trainInfoId').value = '';
+    document.getElementById('coachStatus').value = 'Active';
+    document.getElementById('nextInspectionDate').value = '';
+
+    formAction.value = 'add_coach';
+    modalTitle.textContent = 'Add New Coach';
+    submitCoachBtn.textContent = 'Add Coach';
+}
+
+function editCoach(id, trainInfoId, coachNo, coachType, status, nextInspectionDate) {
+    document.getElementById('coachId').value = id;
+    document.getElementById('trainInfoId').value = trainInfoId;
+    document.getElementById('coachNo').value = coachNo;
+    document.getElementById('coachType').value = coachType;
+    document.getElementById('coachStatus').value = status;
+    document.getElementById('nextInspectionDate').value = nextInspectionDate;
+
+    formAction.value = 'edit_coach';
+    modalTitle.textContent = 'Edit Coach';
+    submitCoachBtn.textContent = 'Update Coach';
+}
+
+function deleteCoach(id) {
+    if (confirm('Are you sure you want to delete this coach?')) {
+        document.getElementById('deleteCoachId').value = id;
+        document.getElementById('deleteForm').submit();
+    }
+}
+
+addCoachBtn.addEventListener('click', resetCoachForm);
+
+coachModalEl.addEventListener('hidden.bs.modal', resetCoachForm);
+</script>
+
+</body>
+</html>
+
+<?php
+$conn->close();
+?>

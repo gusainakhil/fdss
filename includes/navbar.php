@@ -4,7 +4,7 @@
             <i class="bi bi-list"></i>
         </button>
 
-        <a class="navbar-brand" href="index.html">
+        <a class="navbar-brand" href="index.php">
             <i class="bi bi-train-front-fill"></i>
             <span>FDSS - Indian Railways</span>
         </a>
@@ -13,8 +13,17 @@
             <li class="nav-item">
                 <a class="nav-link" href="#"><i class="bi bi-bell"></i></a>
             </li>
+
             <li class="nav-item">
-                <a class="nav-link" href="#"><i class="bi bi-person-circle"></i> Station User</a>
+                <a class="nav-link" href="#">
+                    <i class="bi bi-person-circle"></i> Station User
+                </a>
+            </li>
+
+            <li class="nav-item">
+                <a class="nav-link text-danger fw-semibold" href="logout.php">
+                    <i class="bi bi-box-arrow-right"></i> Logout
+                </a>
             </li>
         </ul>
     </div>

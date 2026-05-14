@@ -15,10 +15,12 @@
     <link href="assets/css/styles.css" rel="stylesheet">
 </head>
 <body>
-    <div id="navbar-placeholder"></div>
+<?php include('includes/navbar.php'); ?>
+<!-- <div id="navbar-placeholder"></div> -->
 
-    <div class="sidebar-container">
-        <div id="sidebar-placeholder"></div>
+<div class="sidebar-container">
+    <!-- <div id="sidebar-placeholder"></div> -->
+    <?php include('includes/sidebar.php'); ?>
 
         <!-- MAIN CONTENT -->
         <main class="main-content">
@@ -27,7 +29,7 @@
                 <div>
                     <h1>Settings</h1>
                     <p class="page-header-subtitle">
-                        <a href="index.html" class="text-primary text-decoration-none">Dashboard</a>
+                        <a href="index.php" class="text-primary text-decoration-none">Dashboard</a>
                         <span class="text-muted"> / </span>Settings
                     </p>
                 </div>
@@ -251,7 +253,9 @@
         </main>
     </div>
 
-    <div id="footer-placeholder"></div>
+           <?php include('includes/footer.php'); ?>
+
+    <!-- <div id="footer-placeholder"></div> -->
 
     <!-- Bootstrap 5 JS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
