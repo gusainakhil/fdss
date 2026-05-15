@@ -19,6 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     $company_name = trim($_POST['company_name'] ?? '');
+    $name = trim($_POST['name'] ?? '');
     $mobile_number = trim($_POST['mobile_number'] ?? '');
     $email_id = trim($_POST['email_id'] ?? '');
     $address = trim($_POST['address'] ?? '');
@@ -30,11 +31,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message_type = "danger";
         } else {
             $query = "INSERT INTO fdss_manufacturers 
-                (company_name, mobile_number, email_id, address, status, user_id) 
-                VALUES (?, ?, ?, ?, ?, ?)";
+                (company_name, name, mobile_number, email_id, address, status, user_id) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)";
 
             $stmt = $conn->prepare($query);
-            $stmt->bind_param("sssssi", $company_name, $mobile_number, $email_id, $address, $status, $user_id);
+            $stmt->bind_param("ssssssi", $company_name, $name, $mobile_number, $email_id, $address, $status, $user_id);
 
             if ($stmt->execute()) {
                 $message = "Manufacturer added successfully!";
@@ -52,11 +53,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $manufacturer_id = (int) ($_POST['manufacturer_id'] ?? 0);
 
         $query = "UPDATE fdss_manufacturers 
-                  SET company_name = ?, mobile_number = ?, email_id = ?, address = ?, status = ?
+                  SET company_name = ?, name = ?, mobile_number = ?, email_id = ?, address = ?, status = ?
                   WHERE manufacturer_id = ? AND user_id = ?";
 
         $stmt = $conn->prepare($query);
-        $stmt->bind_param("sssssii", $company_name, $mobile_number, $email_id, $address, $status, $manufacturer_id, $user_id);
+        $stmt->bind_param("ssssssii", $company_name, $name, $mobile_number, $email_id, $address, $status, $manufacturer_id, $user_id);
 
         if ($stmt->execute()) {
             $message = "Manufacturer updated successfully!";
@@ -153,6 +154,7 @@ $stmt->close();
                         <thead>
                             <tr>
                                 <th>Company Name</th>
+                                <th>Name</th>
                                 <th>Mobile Number</th>
                                 <th>Email ID</th>
                                 <th>Address</th>
@@ -172,6 +174,7 @@ $stmt->close();
                             <?php foreach ($manufacturers as $manufacturer): ?>
                                 <tr>
                                     <td><strong><?php echo e($manufacturer['company_name']); ?></strong></td>
+                                    <td><?php echo e($manufacturer['name'] ?: '-'); ?></td>
                                     <td><?php echo e($manufacturer['mobile_number'] ?: '-'); ?></td>
                                     <td><?php echo e($manufacturer['email_id'] ?: '-'); ?></td>
                                     <td><?php echo e($manufacturer['address'] ?: '-'); ?></td>
@@ -186,6 +189,7 @@ $stmt->close();
                                             onclick="editManufacturer(
                                                 '<?php echo e($manufacturer['manufacturer_id']); ?>',
                                                 '<?php echo e(addslashes($manufacturer['company_name'])); ?>',
+                                                '<?php echo e(addslashes($manufacturer['name'])); ?>',
                                                 '<?php echo e(addslashes($manufacturer['mobile_number'])); ?>',
                                                 '<?php echo e(addslashes($manufacturer['email_id'])); ?>',
                                                 '<?php echo e(addslashes($manufacturer['address'])); ?>',
@@ -231,6 +235,11 @@ $stmt->close();
                     <div class="mb-3">
                         <label class="form-label">Company Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="companyName" name="company_name" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" id="name" name="name">
                     </div>
 
                     <div class="mb-3">
@@ -288,6 +297,7 @@ function resetManufacturerForm() {
     document.getElementById('formAction').value = 'add_manufacturer';
     document.getElementById('manufacturerId').value = '';
     document.getElementById('companyName').value = '';
+    document.getElementById('name').value = '';
     document.getElementById('mobileNumber').value = '';
     document.getElementById('emailId').value = '';
     document.getElementById('address').value = '';
@@ -297,10 +307,11 @@ function resetManufacturerForm() {
     submitBtn.textContent = 'Save Manufacturer';
 }
 
-function editManufacturer(id, companyName, mobileNumber, emailId, address, status) {
+function editManufacturer(id, companyName, name, mobileNumber, emailId, address, status) {
     document.getElementById('formAction').value = 'edit_manufacturer';
     document.getElementById('manufacturerId').value = id;
     document.getElementById('companyName').value = companyName;
+    document.getElementById('name').value = name;
     document.getElementById('mobileNumber').value = mobileNumber;
     document.getElementById('emailId').value = emailId;
     document.getElementById('address').value = address;
