@@ -211,7 +211,7 @@ $stmt->close();
                             <tr>
                                 <th>Item Code</th>
                                 <th>Component Name</th>
-                                <th>Quantity</th>
+                                <th>Quantity / Count</th>
                                 <th>Category</th>
                                 <th>Last Updated</th>
                                 <th>Actions</th>
@@ -228,7 +228,11 @@ $stmt->close();
                         <?php else: ?>
                             <?php foreach ($inventory_items as $item): ?>
                                 <tr>
-                                    <td><?php echo htmlspecialchars($item['item_code']); ?></td>
+                                    <td>
+                                        <a href="inventory-item-details.php?inventory_id=<?php echo htmlspecialchars($item['inventory_id']); ?>" target="_blank" class="text-decoration-none">
+                                            <?php echo htmlspecialchars($item['item_code']); ?>
+                                        </a>
+                                    </td>
                                     <td><?php echo htmlspecialchars($item['item_name']); ?></td>
                                     <td><?php echo htmlspecialchars($item['quantity']); ?></td>
                                     <td>
