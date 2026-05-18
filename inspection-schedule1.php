@@ -1,3 +1,4 @@
+
 <?php
 session_start();
 require_once 'config/db.php';
@@ -373,6 +374,27 @@ if ($stmt) {
     $message_type = "danger";
 }
 
+$calendar_events = [];
+
+foreach ($coaches as $coach) {
+    $calendar_events[$coach['next_inspection_date']][] = $coach;
+}
+
+$calendar_months = [];
+$calendar_month_map = [];
+
+if (empty($coaches)) {
+    $calendar_month_map[date('Y-m')] = new DateTime(date('Y-m-01'));
+} else {
+    foreach ($coaches as $coach) {
+        $month_key = date('Y-m', strtotime($coach['next_inspection_date']));
+        $calendar_month_map[$month_key] = new DateTime($month_key . '-01');
+    }
+}
+
+ksort($calendar_month_map);
+$calendar_months = array_values($calendar_month_map);
+
 /*
 |--------------------------------------------------------------------------
 | FETCH RECENT SCHEDULES
@@ -472,6 +494,147 @@ if ($stmt) {
 
     <link href="assets/css/styles.css"
           rel="stylesheet">
+
+    <style>
+        .inspection-calendar {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background: #ffffff;
+            overflow-x: auto;
+        }
+
+        .calendar-title {
+            background: #61a2cb;
+            color: #ffffff;
+            font-size: .95rem;
+            font-weight: 700;
+            letter-spacing: 0;
+            padding: 10px 14px;
+            text-transform: uppercase;
+        }
+
+        .calendar-weekdays,
+        .calendar-grid {
+            min-width: 700px;
+            display: grid;
+            grid-template-columns: repeat(7, minmax(92px, 1fr));
+        }
+
+        .calendar-weekdays > div {
+            background: #f8fafc;
+            border-bottom: 1px solid #e5e7eb;
+            border-right: 1px solid #e5e7eb;
+            color: #475569;
+            font-size: .72rem;
+            font-weight: 700;
+            padding: 7px 8px;
+            text-align: center;
+            text-transform: uppercase;
+        }
+
+        .calendar-weekdays > div:last-child {
+            border-right: 0;
+        }
+
+        .calendar-day {
+            border-bottom: 1px solid #e5e7eb;
+            border-right: 1px solid #e5e7eb;
+            min-height: 92px;
+            padding: 27px 6px 6px;
+            position: relative;
+        }
+
+        .calendar-day:nth-child(7n) {
+            border-right: 0;
+        }
+
+        .calendar-day.is-muted {
+            background: #f8fafc;
+            color: #cbd5e1;
+        }
+
+        .calendar-day.is-today {
+            background: #f0f9ff;
+        }
+
+        .calendar-date {
+            background: #e0f2fe;
+            border-bottom: 1px solid #bae6fd;
+            color: #075985;
+            font-size: .82rem;
+            font-weight: 700;
+            left: 0;
+            line-height: 22px;
+            padding-right: 8px;
+            position: absolute;
+            right: 0;
+            text-align: right;
+            top: 0;
+        }
+
+        .calendar-event {
+            background: #eef7fb;
+            border: 1px solid #c9e7f4;
+            border-radius: 6px;
+            color: #1e293b;
+            display: grid;
+            gap: 1px;
+            grid-template-columns: auto 1fr;
+            line-height: 1.2;
+            margin-bottom: 5px;
+            padding: 5px 6px;
+            text-align: left;
+            width: 100%;
+        }
+
+        .calendar-event:hover {
+            background: #dff1f8;
+            border-color: #61a2cb;
+        }
+
+        .calendar-event:hover .event-title,
+        .calendar-event:hover .event-meta {
+            color: #075985;
+            text-decoration: none;
+        }
+
+        .event-time {
+            color: #0f759b;
+            font-size: .66rem;
+            font-weight: 700;
+            padding-right: 6px;
+        }
+
+        .event-title {
+            font-size: .72rem;
+            font-weight: 700;
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+
+        .event-meta {
+            color: #64748b;
+            font-size: .66rem;
+            grid-column: 2;
+            overflow-wrap: anywhere;
+        }
+
+        @media (max-width: 767.98px) {
+            .calendar-title {
+                font-size: .86rem;
+                padding: 9px 12px;
+            }
+
+            .calendar-weekdays,
+            .calendar-grid {
+                min-width: 650px;
+            }
+
+            .calendar-day {
+                min-height: 86px;
+            }
+        }
+    </style>
 
 </head>
 
@@ -604,120 +767,97 @@ if ($stmt) {
 
                 </div>
 
-                <div class="card-body">
-
-                    <div class="table-wrapper">
-
-                        <table class="table table-hover">
-
-                            <thead>
-
-                            <tr>
-
-                                <th>Due Date</th>
-                                <th>Coach No.</th>
-                                <th>Train</th>
-                                <th>Coach Type</th>
-                                <th>Action</th>
-
-                            </tr>
-
-                            </thead>
-
-                            <tbody>
-
-                            <?php if (empty($coaches)): ?>
-
-                                <tr>
-
-                                    <td colspan="5"
-                                        class="text-center text-muted py-4">
-
-                                        No overdue coaches or coaches due within next 3 days.
-
-                                    </td>
-
-                                </tr>
-
-                            <?php else: ?>
-
-                                <?php foreach ($coaches as $coach): ?>
-
-                                    <tr>
-
-                                        <td>
-
-                                            <strong>
-
-                                                <?php echo date('d M Y', strtotime($coach['next_inspection_date'])); ?>
-
-                                            </strong>
-
-                                        </td>
-
-                                        <td>
-
-                                            <strong>
-
-                                                <?php echo e($coach['coach_no']); ?>
-
-                                            </strong>
-
-                                        </td>
-
-                                        <td>
-
-                                            <strong>
-
-                                                <?php echo e($coach['train_no'] ?: 'Detached'); ?>
-
-                                            </strong>
-
-                                            <br>
-
-                                            <?php echo e($coach['train_name'] ?: '-'); ?>
-
-                                        </td>
-
-                                        <td>
-
-                                            <?php echo e($coach['coach_type']); ?>
-
-                                        </td>
-
-                                        <td>
-
-                                            <button
-                                                type="button"
-                                                class="btn btn-sm btn-primary"
-	                                                onclick="openScheduleModal(
-                                                    '<?php echo e($coach['coach_id']); ?>',
-	                                                    '<?php echo e($coach['train_info_id']); ?>',
-	                                                    '<?php echo e($coach['coach_no']); ?>',
-	                                                    '<?php echo e($coach['next_inspection_date']); ?>'
-                                                )"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#scheduleModal">
-
-                                                Create Schedule
-
-                                            </button>
-
-                                        </td>
-
-                                    </tr>
-
-                                <?php endforeach; ?>
-
-                            <?php endif; ?>
-
-                            </tbody>
-
-                        </table>
-
-                    </div>
-
-                </div>
+	                <div class="card-body">
+	
+	                    <?php if (empty($coaches)): ?>
+	
+	                        <div class="text-center text-muted py-4">
+	                            No overdue coaches or coaches due within next 3 days.
+	                        </div>
+	
+	                    <?php else: ?>
+	
+	                        <?php foreach ($calendar_months as $calendar_month): ?>
+	
+	                            <?php
+	                            $month_start = new DateTime($calendar_month->format('Y-m-01'));
+	                            $month_end = new DateTime($calendar_month->format('Y-m-t'));
+	                            $grid_start = clone $month_start;
+	                            $grid_start->modify('-' . ((int)$grid_start->format('N') - 1) . ' days');
+	                            $grid_end = clone $month_end;
+	                            $grid_end->modify('+' . (7 - (int)$grid_end->format('N')) . ' days');
+	                            $day_cursor = clone $grid_start;
+	                            ?>
+	
+	                            <div class="inspection-calendar mb-4">
+	
+	                                <div class="calendar-title">
+	                                    <?php echo e($calendar_month->format('F Y')); ?>
+	                                </div>
+	
+	                                <div class="calendar-weekdays">
+	                                    <div>Monday</div>
+	                                    <div>Tuesday</div>
+	                                    <div>Wednesday</div>
+	                                    <div>Thursday</div>
+	                                    <div>Friday</div>
+	                                    <div>Saturday</div>
+	                                    <div>Sunday</div>
+	                                </div>
+	
+	                                <div class="calendar-grid">
+	
+	                                    <?php while ($day_cursor <= $grid_end): ?>
+	
+	                                        <?php
+	                                        $date_key = $day_cursor->format('Y-m-d');
+	                                        $is_current_month = $day_cursor->format('m') === $calendar_month->format('m');
+	                                        $day_events = $calendar_events[$date_key] ?? [];
+	                                        ?>
+	
+	                                        <div class="calendar-day <?php echo $is_current_month ? '' : 'is-muted'; ?> <?php echo $date_key === $today ? 'is-today' : ''; ?>">
+	
+	                                            <div class="calendar-date">
+	                                                <?php echo e($day_cursor->format('j')); ?>
+	                                            </div>
+	
+	                                            <?php foreach ($day_events as $coach): ?>
+	
+	                                                <button
+	                                                    type="button"
+	                                                    class="calendar-event"
+	                                                    onclick="openScheduleModal(
+	                                                        '<?php echo e($coach['coach_id']); ?>',
+	                                                        '<?php echo e($coach['train_info_id']); ?>',
+	                                                        '<?php echo e($coach['coach_no']); ?>',
+	                                                        '<?php echo e($coach['next_inspection_date']); ?>'
+	                                                    )"
+	                                                    data-bs-toggle="modal"
+	                                                    data-bs-target="#scheduleModal">
+	                                                    <span class="event-time">Due</span>
+	                                                    <span class="event-title"><?php echo e($coach['coach_no']); ?></span>
+	                                                    <span class="event-meta">
+	                                                        <?php echo e($coach['train_no'] ?: 'Detached'); ?>
+	                                                    </span>
+	                                                </button>
+	
+	                                            <?php endforeach; ?>
+	
+	                                        </div>
+	
+	                                        <?php $day_cursor->modify('+1 day'); ?>
+	
+	                                    <?php endwhile; ?>
+	
+	                                </div>
+	
+	                            </div>
+	
+	                        <?php endforeach; ?>
+	
+	                    <?php endif; ?>
+	
+	                </div>
 
             </div>
 
@@ -1120,8 +1260,3 @@ function openScheduleModal(coachId, trainInfoId, coachNo, nextDueDate) {
 <?php
 $conn->close();
 ?>
-
-
-
-
-
