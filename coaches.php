@@ -359,7 +359,7 @@ function e($value) {
                 <div class="modal-body">
                     <div class="form-group mb-3">
                         <label class="form-label">Coach Number <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="coachNo" name="coach_no" placeholder="e.g., C-101" required>
+                        <input type="text" class="form-control" id="coachNo" name="coach_no" placeholder="e.g., SWLWACCN12332" required>
                     </div>
 
                     <div class="form-group mb-3">
