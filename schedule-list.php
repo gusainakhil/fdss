@@ -19,6 +19,46 @@ function e($value)
 $message = '';
 $message_type = '';
 
+$selected_schedule_date = trim($_GET['schedule_date'] ?? '');
+
+if (
+    $selected_schedule_date !== '' &&
+    !preg_match('/^\d{4}-\d{2}-\d{2}$/', $selected_schedule_date)
+) {
+    $selected_schedule_date = '';
+}
+
+$rows_per_page_options = [
+    '10' => '10',
+    '20' => '20',
+    '50' => '50',
+    'all' => 'All'
+];
+
+$selected_rows_per_page = $_GET['rows_per_page'] ?? '10';
+
+if (!array_key_exists($selected_rows_per_page, $rows_per_page_options)) {
+    $selected_rows_per_page = '10';
+}
+
+$schedule_limit = $selected_rows_per_page === 'all'
+    ? null
+    : (int) $selected_rows_per_page;
+
+$schedule_uses_coach_id = false;
+$schedule_column_check = $conn->query("SHOW COLUMNS FROM fdss_coach_schedule LIKE 'coach_id'");
+
+if ($schedule_column_check && $schedule_column_check->num_rows > 0) {
+    $schedule_uses_coach_id = true;
+}
+
+$schedule_uses_coach_no = false;
+$schedule_coach_no_column_check = $conn->query("SHOW COLUMNS FROM fdss_coach_schedule LIKE 'coach_no'");
+
+if ($schedule_coach_no_column_check && $schedule_coach_no_column_check->num_rows > 0) {
+    $schedule_uses_coach_no = true;
+}
+
 /*
 |--------------------------------------------------------------------------
 | UPDATE SCHEDULE
@@ -222,42 +262,107 @@ if ($stmt) {
 
 $schedules = [];
 
-$query = "SELECT
+$where_clause = "WHERE s.user_id = ?";
+$bind_types = "i";
+$bind_values = [$user_id];
 
-            s.schedule_id,
-            s.coach_no,
-            s.train_info_id,
-            s.last_inspection_date,
-            s.next_due_date,
-            s.status,
-            s.assignment_date_time,
-            s.priority,
-            s.special_remarks,
+if ($selected_schedule_date !== '') {
+    $where_clause .= " AND DATE(s.assignment_date_time) = ?";
+    $bind_types .= "s";
+    $bind_values[] = $selected_schedule_date;
+}
 
-            u.user_name,
-            u.full_name,
-            u.user_id AS auditor_user_id,
+if ($schedule_uses_coach_id) {
+    $coach_no_select = $schedule_uses_coach_no
+        ? "COALESCE(c.coach_no, s.coach_no) AS coach_no"
+        : "c.coach_no";
 
-            t.train_no,
-            t.train_name
+    $query = "SELECT
 
-          FROM fdss_coach_schedule s
+                s.schedule_id,
+                s.coach_id,
+                $coach_no_select,
+                COALESCE(s.train_info_id, c.train_info_id) AS train_info_id,
+                s.last_inspection_date,
+                s.next_due_date,
+                s.status,
+                s.assignment_date_time,
+                s.priority,
+                s.special_remarks,
 
-          LEFT JOIN fdss_users u
-            ON u.user_id = s.auditor_id
+                u.user_name,
+                u.full_name,
+                u.user_id AS auditor_user_id,
 
-          LEFT JOIN fdss_train_information t
-            ON t.train_info_id = s.train_info_id
+                t.train_no,
+                t.train_name
 
-          WHERE s.user_id = ?
+              FROM fdss_coach_schedule s
 
-          ORDER BY s.schedule_id DESC";
+              LEFT JOIN fdss_train_coach c
+                ON c.coach_id = s.coach_id
+                AND c.user_id = s.user_id
+
+              LEFT JOIN fdss_users u
+                ON u.user_id = s.auditor_id
+
+              LEFT JOIN fdss_train_information t
+                ON t.train_info_id = COALESCE(s.train_info_id, c.train_info_id)
+
+              $where_clause
+
+              ORDER BY s.assignment_date_time DESC, s.schedule_id DESC";
+} else {
+    $query = "SELECT
+
+                s.schedule_id,
+                NULL AS coach_id,
+                s.coach_no,
+                s.train_info_id,
+                s.last_inspection_date,
+                s.next_due_date,
+                s.status,
+                s.assignment_date_time,
+                s.priority,
+                s.special_remarks,
+
+                u.user_name,
+                u.full_name,
+                u.user_id AS auditor_user_id,
+
+                t.train_no,
+                t.train_name
+
+              FROM fdss_coach_schedule s
+
+              LEFT JOIN fdss_users u
+                ON u.user_id = s.auditor_id
+
+              LEFT JOIN fdss_train_information t
+                ON t.train_info_id = s.train_info_id
+
+              $where_clause
+
+              ORDER BY s.assignment_date_time DESC, s.schedule_id DESC";
+}
+
+if ($schedule_limit !== null) {
+    $query .= " LIMIT ?";
+    $bind_types .= "i";
+    $bind_values[] = $schedule_limit;
+}
 
 $stmt = $conn->prepare($query);
 
 if ($stmt) {
 
-    $stmt->bind_param("i", $user_id);
+    $bind_references = [];
+
+    foreach ($bind_values as $key => $value) {
+        $bind_references[$key] = &$bind_values[$key];
+    }
+
+    $stmt->bind_param($bind_types, ...$bind_references);
 
     $stmt->execute();
 
@@ -268,6 +373,9 @@ if ($stmt) {
     }
 
     $stmt->close();
+} elseif ($message === '') {
+    $message = "Schedule Fetch SQL Error: " . $conn->error;
+    $message_type = "danger";
 }
 
 ?>
@@ -353,6 +461,67 @@ if ($stmt) {
 
         <div class="card-body">
 
+            <form method="GET"
+                  class="row g-3 align-items-end mb-4">
+
+                <div class="col-md-4 col-lg-3">
+
+                    <label class="form-label">
+                        Assignment Date
+                    </label>
+
+                    <input type="date"
+                           class="form-control"
+                           name="schedule_date"
+                           value="<?php echo e($selected_schedule_date); ?>">
+
+                </div>
+
+                <div class="col-md-4 col-lg-3">
+
+                    <label class="form-label">
+                        Rows
+                    </label>
+
+                    <select class="form-select"
+                            name="rows_per_page">
+
+                        <?php foreach ($rows_per_page_options as $value => $label): ?>
+
+                            <option value="<?php echo e($value); ?>"
+                                    <?php echo $selected_rows_per_page === $value ? 'selected' : ''; ?>>
+
+                                <?php echo e($label); ?>
+
+                            </option>
+
+                        <?php endforeach; ?>
+
+                    </select>
+
+                </div>
+
+                <div class="col-md-4 col-lg-3 d-flex gap-2">
+
+                    <button type="submit"
+                            class="btn btn-primary">
+
+                        <i class="bi bi-funnel"></i>
+                        Filter
+
+                    </button>
+
+                    <a href="schedule-list.php"
+                       class="btn btn-outline-secondary">
+
+                        Reset
+
+                    </a>
+
+                </div>
+
+            </form>
+
             <div class="table-wrapper">
 
                 <table class="table table-hover">
@@ -364,7 +533,7 @@ if ($stmt) {
                         <th>Coach</th>
                         <th>Train</th>
                         <th>Auditor</th>
-                        <th>Inspection Date</th>
+                        <th>Assignment Date & Time</th>
                         <th>Due Date</th>
                         <th>Priority</th>
                         <th>Status</th>
