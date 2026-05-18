@@ -10,6 +10,7 @@ require_once 'config/db.php';
 //     serial_number VARCHAR(255) DEFAULT NULL,
 //     model_number VARCHAR(255) DEFAULT NULL,
 //     purchase_date DATE DEFAULT NULL,
+//     warranty_expire DATE DEFAULT NULL,
 //     manufacturer_id INT DEFAULT NULL,
 //     notes TEXT,
 //     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -49,6 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $newSerials = $_POST['new_serial'] ?? [];
     $newModels = $_POST['new_model'] ?? [];
     $newPurchases = $_POST['new_purchase'] ?? [];
+    $newWarrantyExpires = $_POST['new_warranty_expire'] ?? [];
     $newManufacturerIds = $_POST['new_manufacturer'] ?? [];
     $newNotesList = $_POST['new_notes'] ?? [];
 
@@ -56,8 +58,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $conn->begin_transaction();
         try {
             $insertQuery = "INSERT INTO fdds_inventory_unit 
-                (inventory_id, user_id, serial_number, model_number, purchase_date, manufacturer_id, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?)";
+                (inventory_id, user_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
             $insertStmt = $conn->prepare($insertQuery);
 
             $newRowCount = 0;
@@ -65,12 +67,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 $serial = trim($newSerials[$i] ?? '');
                 $model = trim($newModels[$i] ?? '');
                 $purchase = trim($newPurchases[$i] ?? '');
+                $warrantyExpire = trim($newWarrantyExpires[$i] ?? '');
                 $manufacturerId = (int) ($newManufacturerIds[$i] ?? 0) ?: null;
                 $note = trim($newNotesList[$i] ?? '');
 
                 // Only insert if at least one field is filled
-                if (!empty($serial) || !empty($model) || !empty($purchase) || !empty($manufacturerId) || !empty($note)) {
-                    $insertStmt->bind_param('iisssis', $inventory_id, $user_id, $serial, $model, $purchase, $manufacturerId, $note);
+                if (!empty($serial) || !empty($model) || !empty($purchase) || !empty($warrantyExpire) || !empty($manufacturerId) || !empty($note)) {
+                    $insertStmt->bind_param('iissssis', $inventory_id, $user_id, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note);
                     $insertStmt->execute();
                     $newRowCount++;
                 }
@@ -99,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             // Reload existing units
             $existing_units = [];
             if ($item) {
-                $unit_query = "SELECT unit_id, serial_number, model_number, purchase_date, manufacturer_id, notes
+                $unit_query = "SELECT unit_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes
                                FROM fdds_inventory_unit
                                WHERE inventory_id = ? AND user_id = ?
                                ORDER BY unit_id ASC";
@@ -130,15 +133,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     $serial = trim($_POST['edit_serial'] ?? '');
     $model = trim($_POST['edit_model'] ?? '');
     $purchase = trim($_POST['edit_purchase'] ?? '');
+    $warrantyExpire = trim($_POST['edit_warranty_expire'] ?? '');
     $manufacturerId = (int) ($_POST['edit_manufacturer'] ?? 0) ?: null;
     $note = trim($_POST['edit_notes'] ?? '');
 
     if ($unitId > 0 && $inventory_id > 0) {
         $updateQuery = "UPDATE fdds_inventory_unit 
-                        SET serial_number = ?, model_number = ?, purchase_date = ?, manufacturer_id = ?, notes = ?
+                        SET serial_number = ?, model_number = ?, purchase_date = ?, warranty_expire = ?, manufacturer_id = ?, notes = ?
                         WHERE unit_id = ? AND inventory_id = ? AND user_id = ?";
         $updateStmt = $conn->prepare($updateQuery);
-        $updateStmt->bind_param('ssisiii', $serial, $model, $purchase, $manufacturerId, $note, $unitId, $inventory_id, $user_id);
+        $updateStmt->bind_param('ssssisiii', $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $unitId, $inventory_id, $user_id);
         
         if ($updateStmt->execute()) {
             $message = "Unit updated successfully.";
@@ -147,7 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             // Reload existing units
             $existing_units = [];
             if ($item) {
-                $unit_query = "SELECT unit_id, serial_number, model_number, purchase_date, manufacturer_id, notes
+                $unit_query = "SELECT unit_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes
                                FROM fdds_inventory_unit
                                WHERE inventory_id = ? AND user_id = ?
                                ORDER BY unit_id ASC";
@@ -173,7 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
 }
 
 if ($item) {
-    $unit_query = "SELECT unit_id, serial_number, model_number, purchase_date, manufacturer_id, notes
+    $unit_query = "SELECT unit_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes
                    FROM fdds_inventory_unit
                    WHERE inventory_id = ? AND user_id = ?
                    ORDER BY unit_id ASC";
@@ -309,7 +313,8 @@ function e($value) {
                                     <th>Serial Number</th>
                                     <th>Model Number</th>
                                     <th>Purchase Date</th>
-                                    <th>Manufacturer</th>
+                                    <th>Warranty Expire</th>
+                                    <th>OEM</th>
                                     <th>Notes</th>
                                     <th class="text-center">Actions</th>
                                 </tr>
@@ -346,7 +351,8 @@ function e($value) {
                                     <th>Serial Number</th>
                                     <th>Model Number</th>
                                     <th>Purchase Date</th>
-                                    <th>Manufacturer</th>
+                                    <th>Warranty Expire</th>
+                                    <th>OEM</th>
                                     <th>Notes</th>
                                     <th class="text-center">Actions</th>
                                 </tr>
@@ -358,6 +364,7 @@ function e($value) {
                                         <td><?php echo e($unit['serial_number']); ?></td>
                                         <td><?php echo e($unit['model_number']); ?></td>
                                         <td><?php echo e($unit['purchase_date']); ?></td>
+                                        <td><?php echo e($unit['warranty_expire']); ?></td>
                                         <td>
                                             <?php 
                                                 if (!empty($unit['manufacturer_id'])) {
@@ -376,6 +383,7 @@ function e($value) {
                                                     data-serial="<?php echo e($unit['serial_number']); ?>"
                                                     data-model="<?php echo e($unit['model_number']); ?>"
                                                     data-purchase="<?php echo e($unit['purchase_date']); ?>"
+                                                    data-warranty="<?php echo e($unit['warranty_expire']); ?>"
                                                     data-manufacturer="<?php echo e($unit['manufacturer_id']); ?>"
                                                     data-notes="<?php echo e($unit['notes']); ?>">
                                                 <i class="bi bi-pencil"></i> Edit
@@ -430,11 +438,16 @@ function e($value) {
                         <label for="editPurchase" class="form-label">Purchase Date</label>
                         <input type="date" class="form-control" id="editPurchase" name="edit_purchase">
                     </div>
+
+                    <div class="mb-3">
+                        <label for="editWarrantyExpire" class="form-label">Warranty Expire</label>
+                        <input type="date" class="form-control" id="editWarrantyExpire" name="edit_warranty_expire">
+                    </div>
                     
                     <div class="mb-3">
-                        <label for="editManufacturer" class="form-label">Manufacturer</label>
+                        <label for="editManufacturer" class="form-label">OEM</label>
                         <select class="form-select" id="editManufacturer" name="edit_manufacturer">
-                            <option value="">Select manufacturer</option>
+                            <option value="">Select OEM</option>
                             <?php foreach ($manufacturers as $m): ?>
                                 <option value="<?php echo e($m['manufacturer_id']); ?>">
                                     <?php echo e(trim($m['company_name'] . ($m['name'] ? ' - ' . $m['name'] : ''))); ?>
@@ -503,6 +516,7 @@ function e($value) {
         const serialValue = escapeHtml(data.serial_number || '');
         const modelValue = escapeHtml(data.model_number || '');
         const purchaseValue = escapeHtml(data.purchase_date || '');
+        const warrantyValue = escapeHtml(data.warranty_expire || '');
         const manufacturerValue = escapeHtml(data.manufacturer_id || '');
         const notesValue = escapeHtml(data.notes || '');
 
@@ -512,6 +526,7 @@ function e($value) {
             <td><input type="text" class="form-control form-control-sm" name="new_serial[]" placeholder="Serial #" value="${serialValue}"></td>
             <td><input type="text" class="form-control form-control-sm" name="new_model[]" placeholder="Model #" value="${modelValue}"></td>
             <td><input type="date" class="form-control form-control-sm" name="new_purchase[]" value="${purchaseValue}"></td>
+            <td><input type="date" class="form-control form-control-sm" name="new_warranty_expire[]" value="${warrantyValue}"></td>
             <td>
                 <select class="form-select form-select-sm" name="new_manufacturer[]">
                     ${optionsHtml}
@@ -575,7 +590,7 @@ function e($value) {
     }
 
     function downloadCsv() {
-        const rows = [['Unit #', 'Serial Number', 'Model Number', 'Purchase Date', 'Manufacturer', 'Notes']];
+        const rows = [['Unit #', 'Serial Number', 'Model Number', 'Purchase Date', 'Warranty Expire', 'Manufacturer', 'Notes']];
         const rowCount = getRowCount();
         for (let i = 1; i <= rowCount; i++) {
             const serial = document.querySelectorAll('[name="new_serial[]"]')[i - 1]?.value || '';
@@ -583,8 +598,9 @@ function e($value) {
             const purchase = document.querySelectorAll('[name="new_purchase[]"]')[i - 1]?.value || '';
             const manufacturerSelect = document.querySelectorAll('[name="new_manufacturer[]"]')[i - 1];
             const manufacturer = manufacturerSelect ? manufacturerSelect.options[manufacturerSelect.selectedIndex]?.text || '' : '';
+            const warranty = document.querySelectorAll('[name="new_warranty_expire[]"]')[i - 1]?.value || '';
             const notes = document.querySelectorAll('[name="new_notes[]"]')[i - 1]?.value || '';
-            rows.push([i, serial, model, purchase, manufacturer, notes]);
+            rows.push([i, serial, model, purchase, warranty, manufacturer, notes]);
         }
 
         const csvContent = rows.map(r => r.map(v => `"${(v || '').toString().replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -630,6 +646,7 @@ function e($value) {
             const serial = this.getAttribute('data-serial');
             const model = this.getAttribute('data-model');
             const purchase = this.getAttribute('data-purchase');
+            const warranty = this.getAttribute('data-warranty');
             const manufacturer = this.getAttribute('data-manufacturer');
             const notes = this.getAttribute('data-notes');
 
@@ -637,6 +654,7 @@ function e($value) {
             document.getElementById('editSerial').value = serial || '';
             document.getElementById('editModel').value = model || '';
             document.getElementById('editPurchase').value = purchase || '';
+            document.getElementById('editWarrantyExpire').value = warranty || '';
             document.getElementById('editManufacturer').value = manufacturer || '';
             document.getElementById('editNotes').value = notes || '';
 
