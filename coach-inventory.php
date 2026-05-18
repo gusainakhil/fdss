@@ -36,6 +36,7 @@ function e($value) {
 */
 
 $coach_query = "SELECT 
+                    c.coach_id,
                     c.coach_no,
                     c.coach_type,
                     c.status,
@@ -76,13 +77,13 @@ $stmt->close();
 
 /*
 |--------------------------------------------------------------------------
-| FETCH MASTER INVENTORY TOOLS
+| FETCH MASTER INVENTORY ITEMS
 |--------------------------------------------------------------------------
 */
 
 $master_inventory = [];
 
-$master_query = "SELECT inventory_id, item_name 
+$master_query = "SELECT inventory_id, item_code, item_name, category
                  FROM fdss_Inventory_Management
                  WHERE user_id = ?
                  ORDER BY item_name ASC";
@@ -101,25 +102,45 @@ $stmt->close();
 
 /*
 |--------------------------------------------------------------------------
-| FETCH MANUFACTURERS
+| FETCH AVAILABLE INVENTORY UNITS
 |--------------------------------------------------------------------------
 */
 
-$manufacturers = [];
+$inventory_units = [];
 
-$manufacturer_query = "SELECT manufacturer_id, company_name 
-                       FROM fdss_manufacturers
-                       WHERE user_id = ? AND status = 'Active'
-                       ORDER BY company_name ASC";
+$unit_query = "SELECT 
+                    iu.unit_id,
+                    iu.inventory_id,
+                    iu.serial_number,
+                    iu.model_number,
+                    iu.purchase_date,
+                    iu.Warranty_expire,
+                    iu.notes,
+                    im.item_name,
+                    m.company_name,
+                    ci.id AS assigned_id,
+                    tc.coach_no AS assigned_coach_no
+               FROM fdds_inventory_unit iu
+               INNER JOIN fdss_Inventory_Management im 
+                    ON im.inventory_id = iu.inventory_id
+               LEFT JOIN fdss_manufacturers m 
+                    ON m.manufacturer_id = iu.manufacturer_id
+               LEFT JOIN fdss_coach_inventory ci 
+                    ON ci.inventory_unit_id = iu.unit_id 
+                    AND ci.user_id = iu.user_id
+               LEFT JOIN fdss_train_coach tc
+                    ON tc.coach_id = ci.coach_id
+               WHERE iu.user_id = ?
+               ORDER BY im.item_name ASC, iu.unit_id DESC";
 
-$stmt = $conn->prepare($manufacturer_query);
+$stmt = $conn->prepare($unit_query);
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
 
-$manufacturer_result = $stmt->get_result();
+$unit_result = $stmt->get_result();
 
-while ($row = $manufacturer_result->fetch_assoc()) {
-    $manufacturers[] = $row;
+while ($row = $unit_result->fetch_assoc()) {
+    $inventory_units[] = $row;
 }
 
 $stmt->close();
@@ -142,83 +163,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'add_inventory') {
 
-        $tool_name = trim($_POST['tool_name'] ?? '');
-        $manufacturer_id = !empty($_POST['manufacturer_id']) ? (int) $_POST['manufacturer_id'] : null;
-        $model_number = trim($_POST['model_number'] ?? '');
-        $serial_number = trim($_POST['serial_number'] ?? '');
-
-        $installed_date = !empty($_POST['installed_date'])
-            ? $_POST['installed_date']
-            : null;
-
-        $expiry_date = !empty($_POST['expiry_date'])
-            ? $_POST['expiry_date']
-            : null;
-
-        $last_service_date = !empty($_POST['last_service_date'])
-            ? $_POST['last_service_date']
-            : null;
-
-        $next_service_date = !empty($_POST['next_service_date'])
-            ? $_POST['next_service_date']
-            : null;
-
-        $remarks = trim($_POST['remarks'] ?? '');
-
+        $inventory_unit_id = (int) ($_POST['inventory_unit_id'] ?? 0);
         $status = $_POST['status'] ?? 'Active';
 
-        $insert_query = "INSERT INTO fdss_coach_inventory
-        (
-            train_info_id,
-            coach_no,
-            tool_name,
-            manufacturer_id,
-            model_number,
-            serial_number,
-            installed_date,
-            expiry_date,
-            last_service_date,
-            next_service_date,
-            remarks,
-            user_id,
-            status
-        )
-        VALUES
-        (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        )";
-
-        $stmt = $conn->prepare($insert_query);
-
-        $stmt->bind_param(
-            "issssssssssis",
-            $train_info_id,
-            $coach_no,
-            $tool_name,
-            $manufacturer_id,
-            $model_number,
-            $serial_number,
-            $installed_date,
-            $expiry_date,
-            $last_service_date,
-            $next_service_date,
-            $remarks,
-            $user_id,
-            $status
-        );
-
-        if ($stmt->execute()) {
-
-            $message = "Inventory added successfully!";
-            $message_type = "success";
-
-        } else {
-
-            $message = "Error adding inventory.";
+        if ($inventory_unit_id <= 0) {
+            $message = "Please select an inventory unit.";
             $message_type = "danger";
-        }
+        } else {
+            $check_query = "SELECT ci.id
+                            FROM fdss_coach_inventory ci
+                            WHERE ci.inventory_unit_id = ?
+                            AND ci.user_id = ?
+                            LIMIT 1";
 
-        $stmt->close();
+            $check_stmt = $conn->prepare($check_query);
+            $check_stmt->bind_param("ii", $inventory_unit_id, $user_id);
+            $check_stmt->execute();
+            $check_result = $check_stmt->get_result();
+
+            if ($check_result->num_rows > 0) {
+                $message = "This inventory unit is already assigned to a coach.";
+                $message_type = "danger";
+            } else {
+                $unit_check_query = "SELECT unit_id FROM fdds_inventory_unit WHERE unit_id = ? AND user_id = ?";
+                $unit_check_stmt = $conn->prepare($unit_check_query);
+                $unit_check_stmt->bind_param("ii", $inventory_unit_id, $user_id);
+                $unit_check_stmt->execute();
+                $unit_check_result = $unit_check_stmt->get_result();
+
+                if ($unit_check_result->num_rows === 0) {
+                    $message = "Selected inventory unit not found.";
+                    $message_type = "danger";
+                } else {
+                    $insert_query = "INSERT INTO fdss_coach_inventory
+                        (coach_id, inventory_unit_id, user_id, status)
+                        VALUES (?, ?, ?, ?)";
+
+                    $stmt = $conn->prepare($insert_query);
+                    $stmt->bind_param("iiis", $coach['coach_id'], $inventory_unit_id, $user_id, $status);
+
+                    if ($stmt->execute()) {
+                        $message = "Inventory assigned successfully!";
+                        $message_type = "success";
+                    } else {
+                        $message = "Error assigning inventory.";
+                        $message_type = "danger";
+                    }
+
+                    $stmt->close();
+                }
+
+                $unit_check_stmt->close();
+            }
+
+            $check_stmt->close();
+        }
     }
 
     /*
@@ -230,78 +229,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     elseif ($action === 'edit_inventory') {
 
         $coach_inventory_id = (int) ($_POST['coach_inventory_id'] ?? 0);
-
-        $tool_name = trim($_POST['tool_name'] ?? '');
-        $manufacturer_id = !empty($_POST['manufacturer_id']) ? (int) $_POST['manufacturer_id'] : null;
-        $model_number = trim($_POST['model_number'] ?? '');
-        $serial_number = trim($_POST['serial_number'] ?? '');
-
-        $installed_date = !empty($_POST['installed_date'])
-            ? $_POST['installed_date']
-            : null;
-
-        $expiry_date = !empty($_POST['expiry_date'])
-            ? $_POST['expiry_date']
-            : null;
-
-        $last_service_date = !empty($_POST['last_service_date'])
-            ? $_POST['last_service_date']
-            : null;
-
-        $next_service_date = !empty($_POST['next_service_date'])
-            ? $_POST['next_service_date']
-            : null;
-
-        $remarks = trim($_POST['remarks'] ?? '');
-
+        $inventory_unit_id = (int) ($_POST['inventory_unit_id'] ?? 0);
         $status = $_POST['status'] ?? 'Active';
 
-        $update_query = "UPDATE fdss_coach_inventory SET
-
-            tool_name = ?,
-            manufacturer_id = ?,
-            model_number = ?,
-            serial_number = ?,
-            installed_date = ?,
-            expiry_date = ?,
-            last_service_date = ?,
-            next_service_date = ?,
-            remarks = ?,
-            status = ?
-
-            WHERE coach_inventory_id = ?
-            AND user_id = ?";
-
-        $stmt = $conn->prepare($update_query);
-
-        $stmt->bind_param(
-            "ssssssssssii",
-            $tool_name,
-            $manufacturer_id,
-            $model_number,
-            $serial_number,
-            $installed_date,
-            $expiry_date,
-            $last_service_date,
-            $next_service_date,
-            $remarks,
-            $status,
-            $coach_inventory_id,
-            $user_id
-        );
-
-        if ($stmt->execute()) {
-
-            $message = "Inventory updated successfully!";
-            $message_type = "success";
-
-        } else {
-
-            $message = "Error updating inventory.";
+        if ($coach_inventory_id <= 0 || $inventory_unit_id <= 0) {
+            $message = "Please select an inventory unit.";
             $message_type = "danger";
-        }
+        } else {
+            $duplicate_query = "SELECT id
+                                FROM fdss_coach_inventory
+                                WHERE inventory_unit_id = ?
+                                AND user_id = ?
+                                AND id != ?
+                                LIMIT 1";
+            $duplicate_stmt = $conn->prepare($duplicate_query);
+            $duplicate_stmt->bind_param("iii", $inventory_unit_id, $user_id, $coach_inventory_id);
+            $duplicate_stmt->execute();
+            $duplicate_result = $duplicate_stmt->get_result();
 
-        $stmt->close();
+            if ($duplicate_result->num_rows > 0) {
+                $message = "This inventory unit is already assigned to a coach.";
+                $message_type = "danger";
+            } else {
+                $update_query = "UPDATE fdss_coach_inventory SET
+                                    inventory_unit_id = ?,
+                                    status = ?
+                                 WHERE id = ?
+                                 AND coach_id = ?
+                                 AND user_id = ?";
+
+                $stmt = $conn->prepare($update_query);
+                $stmt->bind_param(
+                    "isiii",
+                    $inventory_unit_id,
+                    $status,
+                    $coach_inventory_id,
+                    $coach['coach_id'],
+                    $user_id
+                );
+
+                if ($stmt->execute()) {
+                    $message = "Inventory assignment updated successfully!";
+                    $message_type = "success";
+                } else {
+                    $message = "Error updating inventory.";
+                    $message_type = "danger";
+                }
+
+                $stmt->close();
+            }
+
+            $duplicate_stmt->close();
+        }
     }
 
     /*
@@ -315,12 +294,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $coach_inventory_id = (int) ($_POST['coach_inventory_id'] ?? 0);
 
         $delete_query = "DELETE FROM fdss_coach_inventory
-                         WHERE coach_inventory_id = ?
+                         WHERE id = ?
+                         AND coach_id = ?
                          AND user_id = ?";
 
         $stmt = $conn->prepare($delete_query);
 
-        $stmt->bind_param("ii", $coach_inventory_id, $user_id);
+        $stmt->bind_param("iii", $coach_inventory_id, $coach['coach_id'], $user_id);
 
         if ($stmt->execute()) {
 
@@ -345,36 +325,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $inventory_items = [];
 
-$list_query = "SELECT ci.*, m.company_name
+$list_query = "SELECT 
+                    ci.id AS coach_inventory_id,
+                    ci.inventory_unit_id,
+                    ci.status,
+                    ci.created_at,
+                    ci.updated_at,
+                    iu.inventory_id,
+                    iu.serial_number,
+                    iu.model_number,
+                    iu.purchase_date,
+                    iu.Warranty_expire,
+                    iu.notes,
+                    im.item_name AS tool_name,
+                    m.company_name
                FROM fdss_coach_inventory ci
-               LEFT JOIN fdss_manufacturers m ON ci.manufacturer_id = m.manufacturer_id
-               WHERE ci.coach_no = ?
+               INNER JOIN fdds_inventory_unit iu 
+                    ON iu.unit_id = ci.inventory_unit_id
+               INNER JOIN fdss_Inventory_Management im
+                    ON im.inventory_id = iu.inventory_id
+               LEFT JOIN fdss_manufacturers m 
+                    ON m.manufacturer_id = iu.manufacturer_id
+               WHERE ci.coach_id = ?
                AND ci.user_id = ?";
 
-if ($train_info_id !== null) {
-    $list_query .= "\n               AND ci.train_info_id = ?";
-} else {
-    $list_query .= "\n               AND ci.train_info_id IS NULL";
-}
-
-$list_query .= "\n               ORDER BY ci.coach_inventory_id DESC";
+$list_query .= "\n               ORDER BY ci.id DESC";
 
 $stmt = $conn->prepare($list_query);
-
-if ($train_info_id !== null) {
-    $stmt->bind_param(
-        "isi",
-        $coach_no,
-        $user_id,
-        $train_info_id
-    );
-} else {
-    $stmt->bind_param(
-        "si",
-        $coach_no,
-        $user_id
-    );
-}
+$stmt->bind_param("ii", $coach['coach_id'], $user_id);
 
 $stmt->execute();
 
@@ -592,15 +570,13 @@ $stmt->close();
                     <tr>
 
                         <th>Component Name</th>
-                        <th>Manufacturer</th>
+                        <th>OEM</th>
                         <th>Model Number</th>
                         <th>Serial Number</th>
                         <th>Assigned Coach</th>
-                        <th>Installed Date</th>
-                        <th>Expiry Date</th>
-                        <th>Last Service</th>
-                        <th>Next Service</th>
-                        <th>Remarks</th>
+                        <th>Purchase Date</th>
+                        <th>Warranty Expire</th>
+                        <th>Notes</th>
                         <th>Status</th>
                         <th>Actions</th>
 
@@ -614,7 +590,7 @@ $stmt->close();
 
                         <tr>
 
-                            <td colspan="12"
+                            <td colspan="10"
                                 class="text-center text-muted py-4">
 
                                 No inventory found for this coach.
@@ -659,38 +635,22 @@ $stmt->close();
 
                                 <td>
 
-                                    <?php echo $item['installed_date']
-                                        ? date('d M Y', strtotime($item['installed_date']))
+                                    <?php echo $item['purchase_date']
+                                        ? date('d M Y', strtotime($item['purchase_date']))
                                         : '-'; ?>
 
                                 </td>
 
                                 <td>
 
-                                    <?php echo $item['expiry_date']
-                                        ? date('d M Y', strtotime($item['expiry_date']))
+                                    <?php echo $item['Warranty_expire']
+                                        ? date('d M Y', strtotime($item['Warranty_expire']))
                                         : '-'; ?>
 
                                 </td>
 
                                 <td>
-
-                                    <?php echo $item['last_service_date']
-                                        ? date('d M Y', strtotime($item['last_service_date']))
-                                        : '-'; ?>
-
-                                </td>
-
-                                <td>
-
-                                    <?php echo $item['next_service_date']
-                                        ? date('d M Y', strtotime($item['next_service_date']))
-                                        : '-'; ?>
-
-                                </td>
-
-                                <td>
-                                    <?php echo e($item['remarks']); ?>
+                                    <?php echo e($item['notes'] ?: '-'); ?>
                                 </td>
 
                                 <td>
@@ -709,15 +669,8 @@ $stmt->close();
                                         class="btn btn-sm btn-outline-primary"
                                         onclick="editInventory(
                                             '<?php echo e($item['coach_inventory_id']); ?>',
-                                            '<?php echo e(addslashes($item['tool_name'])); ?>',
-                                            '<?php echo e($item['manufacturer_id']); ?>',
-                                            '<?php echo e(addslashes($item['model_number'])); ?>',
-                                            '<?php echo e(addslashes($item['serial_number'])); ?>',
-                                            '<?php echo e($item['installed_date']); ?>',
-                                            '<?php echo e($item['expiry_date']); ?>',
-                                            '<?php echo e($item['last_service_date']); ?>',
-                                            '<?php echo e($item['next_service_date']); ?>',
-                                            '<?php echo e(addslashes($item['remarks'])); ?>',
+                                            '<?php echo e($item['inventory_id']); ?>',
+                                            '<?php echo e($item['inventory_unit_id']); ?>',
                                             '<?php echo e($item['status']); ?>'
                                         )"
                                         data-bs-toggle="modal"
@@ -793,151 +746,77 @@ $stmt->close();
 
                 <div class="modal-body">
 
-                    <div class="mb-3">
+	                    <div class="mb-3">
 
-                        <label class="form-label">
-                            Component Name
-                        </label>
+	                        <label class="form-label">
+	                            Component
+	                        </label>
 
-                        <select class="form-select"
-                                id="toolName"
-                                name="tool_name"
+	                        <select class="form-select"
+	                                id="inventoryItemId"
+	                                required>
+
+	                            <option value="">
+	                                Select Component
+	                            </option>
+
+	                            <?php foreach ($master_inventory as $tool): ?>
+
+	                                <option value="<?php echo e($tool['inventory_id']); ?>">
+
+	                                    <?php echo e($tool['item_name']); ?>
+	                                    <?php if (!empty($tool['item_code'])): ?>
+	                                        (<?php echo e($tool['item_code']); ?>)
+	                                    <?php endif; ?>
+	                                    <?php if (!empty($tool['category'])): ?>
+	                                        - <?php echo e($tool['category']); ?>
+	                                    <?php endif; ?>
+
+	                                </option>
+
+	                            <?php endforeach; ?>
+
+	                        </select>
+
+	                    </div>
+
+	                    <div class="mb-3">
+
+	                        <label class="form-label">
+	                            Inventory Unit
+	                        </label>
+
+	                        <select class="form-select"
+                                id="inventoryUnitId"
+                                name="inventory_unit_id"
                                 required>
 
                             <option value="">
-                                Select Tool
+                                Select Inventory Unit
                             </option>
 
-                            <?php foreach ($master_inventory as $tool): ?>
+                            <?php foreach ($inventory_units as $unit): ?>
 
-                                <option value="<?php echo e($tool['item_name']); ?>">
+	                                <option value="<?php echo e($unit['unit_id']); ?>"
+	                                        data-inventory-id="<?php echo e($unit['inventory_id']); ?>"
+	                                        <?php echo (!empty($unit['assigned_id']) && (int) $unit['assigned_id'] !== 0) ? 'data-assigned="1"' : ''; ?>>
 
-                                    <?php echo e($tool['item_name']); ?>
+                                    <?php echo e($unit['item_name']); ?>
+                                    <?php if (!empty($unit['serial_number'])): ?>
+                                        - SN: <?php echo e($unit['serial_number']); ?>
+                                    <?php endif; ?>
+                                    <?php if (!empty($unit['model_number'])): ?>
+                                        - Model: <?php echo e($unit['model_number']); ?>
+                                    <?php endif; ?>
+                                    <?php if (!empty($unit['assigned_coach_no'])): ?>
+                                        (Assigned: <?php echo e($unit['assigned_coach_no']); ?>)
+                                    <?php endif; ?>
 
                                 </option>
 
                             <?php endforeach; ?>
 
                         </select>
-
-                    </div>
-
-                    <div class="mb-3">
-
-                        <label class="form-label">
-                            Manufacturer
-                        </label>
-
-                        <select class="form-select"
-                                id="manufacturerId"
-                                name="manufacturer_id">
-
-                            <option value="">
-                                Select Manufacturer
-                            </option>
-
-                            <?php foreach ($manufacturers as $manufacturer): ?>
-
-                                <option value="<?php echo e($manufacturer['manufacturer_id']); ?>">
-
-                                    <?php echo e($manufacturer['company_name']); ?>
-
-                                </option>
-
-                            <?php endforeach; ?>
-
-                        </select>
-
-                    </div>
-
-                    <div class="mb-3">
-
-                        <label class="form-label">
-                            Model Number
-                        </label>
-
-                        <input type="text"
-                               class="form-control"
-                               id="modelNumber"
-                               name="model_number">
-
-                    </div>
-
-                    <div class="mb-3">
-
-                        <label class="form-label">
-                            Serial Number
-                        </label>
-
-                        <input type="text"
-                               class="form-control"
-                               id="serialNumber"
-                               name="serial_number">
-
-                    </div>
-
-                    <div class="mb-3">
-
-                        <label class="form-label">
-                            Installed Date
-                        </label>
-
-                        <input type="date"
-                               class="form-control"
-                               id="installedDate"
-                               name="installed_date">
-
-                    </div>
-
-                    <div class="mb-3">
-
-                        <label class="form-label">
-                            Expiry Date
-                        </label>
-
-                        <input type="date"
-                               class="form-control"
-                               id="expiryDate"
-                               name="expiry_date">
-
-                    </div>
-
-                    <div class="mb-3">
-
-                        <label class="form-label">
-                            Last Service Date
-                        </label>
-
-                        <input type="date"
-                               class="form-control"
-                               id="lastServiceDate"
-                               name="last_service_date">
-
-                    </div>
-
-                    <div class="mb-3">
-
-                        <label class="form-label">
-                            Next Service Date
-                        </label>
-
-                        <input type="date"
-                               class="form-control"
-                               id="nextServiceDate"
-                               name="next_service_date">
-
-                    </div>
-
-                    <div class="mb-3">
-
-                        <label class="form-label">
-                            Remarks
-                        </label>
-
-                        <textarea class="form-control"
-                                  id="remarks"
-                                  name="remarks"
-                                  rows="3"></textarea>
 
                     </div>
 
@@ -1017,28 +896,37 @@ $stmt->close();
 
 const inventoryModalTitle = document.getElementById('inventoryModalTitle');
 const inventorySubmitBtn = document.getElementById('inventorySubmitBtn');
+const inventoryItemId = document.getElementById('inventoryItemId');
+const inventoryUnitId = document.getElementById('inventoryUnitId');
 
+function filterInventoryUnits(selectedUnitId = '') {
+
+    const selectedInventoryId = inventoryItemId.value;
+
+    Array.from(inventoryUnitId.options).forEach(function (option) {
+
+        if (option.value === '') {
+            option.hidden = false;
+            return;
+        }
+
+        option.hidden = option.dataset.inventoryId !== selectedInventoryId;
+    });
+
+    if (selectedUnitId) {
+        inventoryUnitId.value = selectedUnitId;
+    } else {
+        inventoryUnitId.value = '';
+    }
+}
+	
 function resetInventoryForm() {
 
     document.getElementById('coachInventoryId').value = '';
 
-    document.getElementById('toolName').value = '';
+    inventoryItemId.value = '';
 
-    document.getElementById('manufacturerId').value = '';
-
-    document.getElementById('modelNumber').value = '';
-
-    document.getElementById('serialNumber').value = '';
-
-    document.getElementById('installedDate').value = '';
-
-    document.getElementById('expiryDate').value = '';
-
-    document.getElementById('lastServiceDate').value = '';
-
-    document.getElementById('nextServiceDate').value = '';
-
-    document.getElementById('remarks').value = '';
+    filterInventoryUnits();
 
     document.getElementById('inventoryStatus').value = 'Active';
 
@@ -1051,37 +939,16 @@ function resetInventoryForm() {
 
 function editInventory(
     id,
-    toolName,
-    manufacturerId,
-    modelNumber,
-    serialNumber,
-    installedDate,
-    expiryDate,
-    lastServiceDate,
-    nextServiceDate,
-    remarks,
+    inventoryId,
+    inventoryUnitId,
     status
 ) {
 
     document.getElementById('coachInventoryId').value = id;
 
-    document.getElementById('toolName').value = toolName;
+    document.getElementById('inventoryItemId').value = inventoryId;
 
-    document.getElementById('manufacturerId').value = manufacturerId;
-
-    document.getElementById('modelNumber').value = modelNumber;
-
-    document.getElementById('serialNumber').value = serialNumber;
-
-    document.getElementById('installedDate').value = installedDate;
-
-    document.getElementById('expiryDate').value = expiryDate;
-
-    document.getElementById('lastServiceDate').value = lastServiceDate;
-
-    document.getElementById('nextServiceDate').value = nextServiceDate;
-
-    document.getElementById('remarks').value = remarks;
+    filterInventoryUnits(inventoryUnitId);
 
     document.getElementById('inventoryStatus').value = status;
 
@@ -1105,8 +972,14 @@ function deleteInventory(id) {
 document.getElementById('addInventoryBtn')
     .addEventListener('click', resetInventoryForm);
 
+inventoryItemId.addEventListener('change', function () {
+    filterInventoryUnits();
+});
+
 document.getElementById('inventoryModal')
     .addEventListener('hidden.bs.modal', resetInventoryForm);
+
+filterInventoryUnits();
 
 </script>
 

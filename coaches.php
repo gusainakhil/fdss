@@ -168,19 +168,21 @@ $query = "SELECT
             c.next_inspection_date,
             t.train_no,
             t.train_name,
-            COUNT(ci.coach_inventory_id) AS total_inventory,
+            COUNT(ci.id) AS total_inventory,
             SUM(CASE WHEN ci.status = 'Active' THEN 1 ELSE 0 END) AS active_inventory,
             SUM(CASE WHEN ci.status = 'Expired' THEN 1 ELSE 0 END) AS expired_inventory,
             SUM(CASE 
-                WHEN ci.expiry_date IS NOT NULL 
-                AND ci.expiry_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+                WHEN iu.Warranty_expire IS NOT NULL 
+                AND DATE(iu.Warranty_expire) BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
                 THEN 1 ELSE 0 
             END) AS expire_soon
           FROM fdss_train_coach c
           LEFT JOIN fdss_train_information t ON c.train_info_id = t.train_info_id
           LEFT JOIN fdss_coach_inventory ci 
-            ON ci.train_info_id = c.train_info_id 
-            AND ci.coach_no = c.coach_no
+            ON ci.coach_id = c.coach_id
+            AND ci.user_id = c.user_id
+          LEFT JOIN fdds_inventory_unit iu
+            ON iu.unit_id = ci.inventory_unit_id
           WHERE c.user_id = ?";
 
 if ($selected_train !== 'all') {

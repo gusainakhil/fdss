@@ -33,30 +33,43 @@ $total_inventory_used = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_coa
 $fdss_coaches = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_train_coach WHERE user_id = ? AND coach_type LIKE '%FDSS%'", "i", $user_id);
 $FSDS_coaches = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_train_coach WHERE user_id = ? AND coach_type LIKE '%FSDS%'", "i", $user_id);
 
-$total_oem_makes = get_count($conn, "SELECT COUNT(DISTINCT manufacturer_id) AS total FROM fdss_coach_inventory WHERE user_id = ? AND manufacturer_id IS NOT NULL AND manufacturer_id != ''", "i", $user_id);
+$total_oem_makes = get_count($conn, "
+    SELECT COUNT(DISTINCT iu.manufacturer_id) AS total
+    FROM fdss_coach_inventory ci
+    INNER JOIN fdds_inventory_unit iu ON iu.unit_id = ci.inventory_unit_id
+    WHERE ci.user_id = ? AND iu.manufacturer_id IS NOT NULL
+", "i", $user_id);
 
 $fdss_under_warranty = get_count($conn, "
     SELECT COUNT(*) AS total 
     FROM fdss_coach_inventory ci
-    INNER JOIN fdss_train_coach c ON c.train_info_id = ci.train_info_id AND c.coach_no = ci.coach_no
-    WHERE ci.user_id = ? AND c.coach_type LIKE '%FDSS%' AND ci.expiry_date IS NOT NULL AND ci.expiry_date >= CURDATE()
+    INNER JOIN fdss_train_coach c ON c.coach_id = ci.coach_id
+    INNER JOIN fdds_inventory_unit iu ON iu.unit_id = ci.inventory_unit_id
+    WHERE ci.user_id = ? AND c.coach_type LIKE '%FDSS%' AND iu.Warranty_expire IS NOT NULL AND DATE(iu.Warranty_expire) >= CURDATE()
 ", "i", $user_id);
 
 $FSDS_under_warranty = get_count($conn, "
     SELECT COUNT(*) AS total 
     FROM fdss_coach_inventory ci
-    INNER JOIN fdss_train_coach c ON c.train_info_id = ci.train_info_id AND c.coach_no = ci.coach_no
-    WHERE ci.user_id = ? AND c.coach_type LIKE '%FSDS%' AND ci.expiry_date IS NOT NULL AND ci.expiry_date >= CURDATE()
+    INNER JOIN fdss_train_coach c ON c.coach_id = ci.coach_id
+    INNER JOIN fdds_inventory_unit iu ON iu.unit_id = ci.inventory_unit_id
+    WHERE ci.user_id = ? AND c.coach_type LIKE '%FSDS%' AND iu.Warranty_expire IS NOT NULL AND DATE(iu.Warranty_expire) >= CURDATE()
 ", "i", $user_id);
 
 $FSDS_out_warranty = get_count($conn, "
     SELECT COUNT(*) AS total 
     FROM fdss_coach_inventory ci
-    INNER JOIN fdss_train_coach c ON c.train_info_id = ci.train_info_id AND c.coach_no = ci.coach_no
-    WHERE ci.user_id = ? AND c.coach_type LIKE '%FSDS%' AND ci.expiry_date IS NOT NULL AND ci.expiry_date < CURDATE()
+    INNER JOIN fdss_train_coach c ON c.coach_id = ci.coach_id
+    INNER JOIN fdds_inventory_unit iu ON iu.unit_id = ci.inventory_unit_id
+    WHERE ci.user_id = ? AND c.coach_type LIKE '%FSDS%' AND iu.Warranty_expire IS NOT NULL AND DATE(iu.Warranty_expire) < CURDATE()
 ", "i", $user_id);
 
-$expired_inventory = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_coach_inventory WHERE user_id = ? AND expiry_date IS NOT NULL AND expiry_date < CURDATE()", "i", $user_id);
+$expired_inventory = get_count($conn, "
+    SELECT COUNT(*) AS total
+    FROM fdss_coach_inventory ci
+    INNER JOIN fdds_inventory_unit iu ON iu.unit_id = ci.inventory_unit_id
+    WHERE ci.user_id = ? AND iu.Warranty_expire IS NOT NULL AND DATE(iu.Warranty_expire) < CURDATE()
+", "i", $user_id);
 $active_inventory = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_coach_inventory WHERE user_id = ? AND status = 'Active'", "i", $user_id);
 
 $pending_schedules = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_coach_schedule WHERE user_id = ? AND status = 'Pending'", "i", $user_id);
@@ -112,10 +125,12 @@ $inventory_names = [];
 $inventory_usage_counts = [];
 
 $inventory_usage_query = "
-    SELECT tool_name, COUNT(*) AS total
-    FROM fdss_coach_inventory
-    WHERE user_id = ?
-    GROUP BY tool_name
+    SELECT im.item_name AS tool_name, COUNT(*) AS total
+    FROM fdss_coach_inventory ci
+    INNER JOIN fdds_inventory_unit iu ON iu.unit_id = ci.inventory_unit_id
+    INNER JOIN fdss_Inventory_Management im ON im.inventory_id = iu.inventory_id
+    WHERE ci.user_id = ?
+    GROUP BY im.item_name
     ORDER BY total DESC
     LIMIT 10
 ";
@@ -136,12 +151,13 @@ $oem_names = [];
 $oem_counts = [];
 
 $oem_query = "
-    SELECT manufacturer_id, COUNT(*) AS total
-    FROM fdss_coach_inventory
-    WHERE user_id = ?
-    AND manufacturer_id IS NOT NULL
-    AND manufacturer_id != ''
-    GROUP BY manufacturer_id
+    SELECT COALESCE(m.company_name, CONCAT('Manufacturer #', iu.manufacturer_id)) AS manufacturer_name, COUNT(*) AS total
+    FROM fdss_coach_inventory ci
+    INNER JOIN fdds_inventory_unit iu ON iu.unit_id = ci.inventory_unit_id
+    LEFT JOIN fdss_manufacturers m ON m.manufacturer_id = iu.manufacturer_id
+    WHERE ci.user_id = ?
+    AND iu.manufacturer_id IS NOT NULL
+    GROUP BY iu.manufacturer_id, m.company_name
     ORDER BY total DESC
     LIMIT 8
 ";
@@ -152,7 +168,7 @@ if ($oem_stmt) {
     $oem_stmt->execute();
     $oem_result = $oem_stmt->get_result();
     while ($row = $oem_result->fetch_assoc()) {
-        $oem_names[] = $row['manufacturer_id'];
+        $oem_names[] = $row['manufacturer_name'];
         $oem_counts[] = (int)$row['total'];
     }
     $oem_stmt->close();
