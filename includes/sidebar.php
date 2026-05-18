@@ -20,8 +20,8 @@
          <li><a href="auditors.php"><i class="bi bi-person-badge"></i><span> Auditors</span></a></li>
         <li><a href="inspection-schedule.php"><i class="bi bi-calendar-check"></i><span>create Schedule</span></a></li>
         <li><a href="schedule-list.php"><i class="bi bi-calendar-range"></i><span>View Schedule</span></a></li>
-        <li><a href="reports.php"><i class="bi bi-sliders"></i><span>Reports</span></a></li>
-        <li><a href="full-reports.php"><i class="bi bi-sliders"></i><span>Report 2</span></a></li>
+        <li><a href="reports.php"><i class="bi bi-sliders"></i><span>Coach Wise Reports</span></a></li>
+        <li><a href="full-reports.php"><i class="bi bi-sliders"></i><span>Status of FDSS / FSDS</span></a></li>
         <!-- Reports Dropdown -->
         <!-- <li class="sidebar-dropdown">
             <a href="#" class="dropdown-toggle">
