@@ -19,10 +19,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user_id = (int)$_SESSION['user_id'];
         $train_no = trim($_POST['train_no'] ?? '');
         $train_name = trim($_POST['train_name'] ?? '');
-        $No_of_Coach = (int)($_POST['No_of_Coach'] ?? 0);
         $status = $_POST['status'] ?? 'Active';
 
-        if ($train_no === '' || $train_name === '' || $No_of_Coach <= 0) {
+        if ($train_no === '' || $train_name === '') {
             $message = "Please fill all required fields.";
             $message_type = "danger";
         } else {
@@ -46,16 +45,15 @@ if ($check_result->num_rows > 0) {
 
     $insert_query = "INSERT INTO fdss_train_information 
     (user_id, train_no, train_name, No_of_Coach, status) 
-    VALUES (?, ?, ?, ?, ?)";
+    VALUES (?, ?, ?, 0, ?)";
 
     $stmt = $conn->prepare($insert_query);
 
     $stmt->bind_param(
-        "issis",
+        "isss",
         $user_id,
         $train_no,
         $train_name,
-        $No_of_Coach,
         $status
     );
 
@@ -79,15 +77,14 @@ $check_stmt->close();
         $user_id = (int)$_SESSION['user_id'];
         $train_no = trim($_POST['train_no'] ?? '');
         $train_name = trim($_POST['train_name'] ?? '');
-        $No_of_Coach = (int)($_POST['No_of_Coach'] ?? 0);
         $status = $_POST['status'] ?? 'Active';
 
         $update_query = "UPDATE fdss_train_information 
-            SET train_no = ?, train_name = ?, No_of_Coach = ?, status = ?
+            SET train_no = ?, train_name = ?, status = ?
             WHERE train_info_id = ? AND user_id = ?";
 
         $stmt = $conn->prepare($update_query);
-        $stmt->bind_param("ssisii", $train_no, $train_name, $No_of_Coach, $status, $train_info_id, $user_id);
+        $stmt->bind_param("sssii", $train_no, $train_name, $status, $train_info_id, $user_id);
 
         if ($stmt->execute()) {
             $message = "Train updated successfully!";
@@ -123,7 +120,7 @@ $check_stmt->close();
 $trains = [];
 $user_id = (int)$_SESSION['user_id'];
 
-$query = "SELECT train_info_id, user_id, train_no, train_name, No_of_Coach, status, created_at, updated_at 
+$query = "SELECT train_info_id, user_id, train_no, train_name, status, created_at, updated_at 
           FROM fdss_train_information 
           WHERE user_id = ? 
           ORDER BY train_info_id DESC";
@@ -193,7 +190,6 @@ $stmt->close();
                             <tr>
                                 <th>Train Number</th>
                                 <th>Train Route / Name</th>
-                                <th>Coaches</th>
                                 <th>Status</th>
                                 <th>Created Date</th>
                                 <th>Actions</th>
@@ -202,7 +198,7 @@ $stmt->close();
                         <tbody>
                         <?php if (empty($trains)): ?>
                             <tr>
-                                <td colspan="6" class="text-center text-muted py-4">
+                                <td colspan="5" class="text-center text-muted py-4">
                                     No trains found. Click "Add Train" to create one.
                                 </td>
                             </tr>
@@ -211,7 +207,6 @@ $stmt->close();
                                 <tr data-id="<?php echo htmlspecialchars($train['train_info_id']); ?>">
                                     <td><?php echo htmlspecialchars($train['train_no']); ?></td>
                                     <td><?php echo htmlspecialchars($train['train_name']); ?></td>
-                                    <td><?php echo htmlspecialchars($train['No_of_Coach']); ?></td>
                                     <td>
                                         <?php
                                         $status_class = ($train['status'] === 'Active') ? 'badge-success' : 'badge-danger';
@@ -228,7 +223,6 @@ $stmt->close();
                                                 '<?php echo htmlspecialchars($train['train_info_id']); ?>',
                                                 '<?php echo htmlspecialchars(addslashes($train['train_no'])); ?>',
                                                 '<?php echo htmlspecialchars(addslashes($train['train_name'])); ?>',
-                                                '<?php echo htmlspecialchars($train['No_of_Coach']); ?>',
                                                 '<?php echo htmlspecialchars($train['status']); ?>'
                                             )"
                                             data-bs-toggle="modal"
@@ -277,11 +271,6 @@ $stmt->close();
                     </div>
 
                     <div class="form-group mb-3">
-                        <label class="form-label">Number of Coaches <span class="text-danger">*</span></label>
-                        <input type="number" class="form-control" id="trainCoaches" name="No_of_Coach" min="1" required>
-                    </div>
-
-                    <div class="form-group mb-3">
                         <label class="form-label">Status <span class="text-danger">*</span></label>
                         <select class="form-select" id="trainStatus" name="status" required>
                             <option value="Active">Active</option>
@@ -322,7 +311,6 @@ function resetTrainForm() {
     document.getElementById('editingTrainId').value = '';
     document.getElementById('trainNumber').value = '';
     document.getElementById('trainRoute').value = '';
-    document.getElementById('trainCoaches').value = '';
     document.getElementById('trainStatus').value = 'Active';
 
     formAction.value = 'add_train';
@@ -330,11 +318,10 @@ function resetTrainForm() {
     submitTrainBtn.textContent = 'Add Train';
 }
 
-function editTrain(id, trainNo, trainName, coaches, status) {
+function editTrain(id, trainNo, trainName, status) {
     document.getElementById('editingTrainId').value = id;
     document.getElementById('trainNumber').value = trainNo;
     document.getElementById('trainRoute').value = trainName;
-    document.getElementById('trainCoaches').value = coaches;
     document.getElementById('trainStatus').value = status;
 
     formAction.value = 'edit_train';
