@@ -26,10 +26,17 @@ if (isset($_SESSION['flash_message'])) {
 }
 
 $today = date('Y-m-d');
-$next_week = date('Y-m-d', strtotime('+7 days'));
+$advance_cutoff_date = date('Y-m-d', strtotime('+3 days'));
 
 $selected_train = $_GET['train_info_id'] ?? 'all';
-$selected_date = $_GET['due_date'] ?? $next_week;
+$selected_date = $advance_cutoff_date;
+
+$schedule_uses_coach_id = false;
+$schedule_column_check = $conn->query("SHOW COLUMNS FROM fdss_coach_schedule LIKE 'coach_id'");
+
+if ($schedule_column_check && $schedule_column_check->num_rows > 0) {
+    $schedule_uses_coach_id = true;
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -43,8 +50,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'create_schedule') {
 
-        $train_info_id = (int) ($_POST['train_info_id'] ?? 0);
-        $coach_no = trim($_POST['coach_no'] ?? '');
+        $coach_id = (int) ($_POST['coach_id'] ?? 0);
+        $train_info_id = ($_POST['train_info_id'] ?? '') !== ''
+            ? (int) $_POST['train_info_id']
+            : null;
         $auditor_id = (int) ($_POST['auditor_id'] ?? 0);
         $assignment_date_time = trim($_POST['assignment_date_time'] ?? '');
         $priority = $_POST['priority'] ?? 'Normal';
@@ -58,17 +67,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        $last_inspection_date = !empty($_POST['last_inspection_date'])
-            ? $_POST['last_inspection_date']
-            : null;
+        $last_inspection_date = null;
 
         $next_due_date = !empty($_POST['next_due_date'])
             ? $_POST['next_due_date']
             : null;
 
         if (
-            $train_info_id <= 0 ||
-            $coach_no === '' ||
+            $coach_id <= 0 ||
             $auditor_id <= 0 ||
             $assignment_date_time === ''
         ) {
@@ -76,9 +82,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message_type = "danger";
         } else {
 
+            $coach_due_query = "SELECT coach_id, coach_no, next_inspection_date
+                                FROM fdss_train_coach
+                                WHERE user_id = ?
+                                AND coach_id = ?
+                                AND schedule_status = 0
+                                AND next_inspection_date IS NOT NULL
+                                AND next_inspection_date <= ?
+                                LIMIT 1";
+
+            $coach_due_stmt = $conn->prepare($coach_due_query);
+
+            if (!$coach_due_stmt) {
+                $message = "Coach Due Check SQL Error: " . $conn->error;
+                $message_type = "danger";
+            } else {
+                $coach_due_stmt->bind_param(
+                    "iis",
+                    $user_id,
+                    $coach_id,
+                    $advance_cutoff_date
+                );
+
+                $coach_due_stmt->execute();
+                $coach_due_result = $coach_due_stmt->get_result();
+
+                if ($coach_due_result->num_rows === 0) {
+                    $message = "Only overdue coaches or coaches due within the next 3 days can be scheduled.";
+                    $message_type = "danger";
+                    $coach_due_stmt->close();
+                } else {
+                    $coach_due = $coach_due_result->fetch_assoc();
+                    $coach_no_for_schedule = $coach_due['coach_no'];
+                    $current_inspection_date = $coach_due['next_inspection_date'];
+                    $coach_due_stmt->close();
+
+            if (empty($next_due_date) || $next_due_date <= $current_inspection_date) {
+                $message = "Next Due Date must be greater than current inspection date.";
+                $message_type = "danger";
+            } else {
+
+            $schedule_coach_column = $schedule_uses_coach_id ? 'coach_id' : 'coach_no';
+
             $insert_query = "INSERT INTO fdss_coach_schedule
             (
-                coach_no,
+                $schedule_coach_column,
                 train_info_id,
                 last_inspection_date,
                 next_due_date,
@@ -101,37 +149,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message_type = "danger";
             } else {
 
-                $stmt->bind_param(
-                    "sississsi",
-                    $coach_no,
-                    $train_info_id,
-                    $last_inspection_date,
-                    $next_due_date,
-                    $auditor_id,
-                    $assignment_date_time,
-                    $priority,
-                    $special_remarks,
-                    $user_id
-                );
+                if ($schedule_uses_coach_id) {
+                    $stmt->bind_param(
+                        "iississsi",
+                        $coach_id,
+                        $train_info_id,
+                        $last_inspection_date,
+                        $next_due_date,
+                        $auditor_id,
+                        $assignment_date_time,
+                        $priority,
+                        $special_remarks,
+                        $user_id
+                    );
+                } else {
+                    $stmt->bind_param(
+                        "sississsi",
+                        $coach_no_for_schedule,
+                        $train_info_id,
+                        $last_inspection_date,
+                        $next_due_date,
+                        $auditor_id,
+                        $assignment_date_time,
+                        $priority,
+                        $special_remarks,
+                        $user_id
+                    );
+                }
 
                 if ($stmt->execute()) {
 
-                    $updateCoachQuery = "UPDATE fdss_train_coach
-                                         SET schedule_status = 1
-                                         WHERE train_info_id = ?
-                                         AND coach_no = ?
-                                         AND user_id = ?";
+	                    $updateCoachQuery = "UPDATE fdss_train_coach
+	                                         SET schedule_status = 1,
+	                                             next_inspection_date = ?
+	                                         WHERE coach_id = ?
+	                                         AND user_id = ?";
 
                     $updateStmt = $conn->prepare($updateCoachQuery);
 
                     if ($updateStmt) {
 
-                        $updateStmt->bind_param(
-                            "isi",
-                            $train_info_id,
-                            $coach_no,
-                            $user_id
-                        );
+	                        $updateStmt->bind_param(
+	                            "sii",
+	                            $next_due_date,
+	                            $coach_id,
+	                            $user_id
+	                        );
 
                         if ($updateStmt->execute()) {
 
@@ -139,7 +202,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $_SESSION['flash_message'] = "Inspection schedule created successfully!";
                                 $_SESSION['flash_type'] = "success";
                             } else {
-                                $_SESSION['flash_message'] = "Schedule created, but coach status was not updated. Please check train_info_id, coach_no, or user_id.";
+                                $_SESSION['flash_message'] = "Schedule created, but coach status was not updated. Please check coach_id or user_id.";
                                 $_SESSION['flash_type'] = "warning";
                             }
 
@@ -166,6 +229,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 $stmt->close();
+            }
+            }
+                }
             }
         }
     }
@@ -253,12 +319,14 @@ $query = "SELECT
             t.train_name,
             t.train_info_id
           FROM fdss_train_coach c
-          INNER JOIN fdss_train_information t
+          LEFT JOIN fdss_train_information t
             ON t.train_info_id = c.train_info_id
           WHERE c.user_id = ?
+          AND c.status = 'Active'
+          AND (t.status = 'Active' OR c.train_info_id IS NULL)
           AND c.schedule_status = 0
           AND c.next_inspection_date IS NOT NULL
-          AND c.next_inspection_date BETWEEN ? AND ?";
+          AND c.next_inspection_date <= ?";
 
 if ($selected_train !== 'all') {
     $query .= " AND c.train_info_id = ?";
@@ -275,9 +343,8 @@ if ($stmt) {
         $selected_train_id = (int) $selected_train;
 
         $stmt->bind_param(
-            "issi",
+            "isi",
             $user_id,
-            $today,
             $selected_date,
             $selected_train_id
         );
@@ -285,9 +352,8 @@ if ($stmt) {
     } else {
 
         $stmt->bind_param(
-            "iss",
+            "is",
             $user_id,
-            $today,
             $selected_date
         );
     }
@@ -315,30 +381,57 @@ if ($stmt) {
 
 $recent_schedules = [];
 
-$recent_query = "SELECT
-                    s.schedule_id,
-                    s.coach_no,
-                    s.assignment_date_time,
-                    s.priority,
-                    s.status,
-                    u.user_name,
-                    u.full_name,
-                    t.train_no,
-                    t.train_name
-                 FROM fdss_coach_schedule s
-                 LEFT JOIN fdss_users u
-                    ON u.user_id = s.auditor_id
-                 LEFT JOIN fdss_train_information t
-                    ON t.train_info_id = s.train_info_id
-                 WHERE s.user_id = ?
-                 ORDER BY s.schedule_id DESC
-                 LIMIT 10";
+if ($schedule_uses_coach_id) {
+    $recent_query = "SELECT
+                        s.schedule_id,
+                        s.coach_id,
+                        s.assignment_date_time,
+                        s.priority,
+                        s.status,
+                        u.user_name,
+                        u.full_name,
+                        c.coach_no,
+                        t.train_no,
+                        t.train_name
+                     FROM fdss_coach_schedule s
+                     LEFT JOIN fdss_train_coach c
+                        ON c.coach_id = s.coach_id
+                     LEFT JOIN fdss_users u
+                        ON u.user_id = s.auditor_id
+                     LEFT JOIN fdss_train_information t
+                        ON t.train_info_id = COALESCE(s.train_info_id, c.train_info_id)
+                     WHERE s.user_id = ?
+                     AND DATE(s.assignment_date_time) BETWEEN ? AND ?
+                     ORDER BY s.schedule_id DESC
+                     LIMIT 10";
+} else {
+    $recent_query = "SELECT
+                        s.schedule_id,
+                        NULL AS coach_id,
+                        s.assignment_date_time,
+                        s.priority,
+                        s.status,
+                        u.user_name,
+                        u.full_name,
+                        s.coach_no,
+                        t.train_no,
+                        t.train_name
+                     FROM fdss_coach_schedule s
+                     LEFT JOIN fdss_users u
+                        ON u.user_id = s.auditor_id
+                     LEFT JOIN fdss_train_information t
+                        ON t.train_info_id = s.train_info_id
+                     WHERE s.user_id = ?
+                     AND DATE(s.assignment_date_time) BETWEEN ? AND ?
+                     ORDER BY s.schedule_id DESC
+                     LIMIT 10";
+}
 
 $stmt = $conn->prepare($recent_query);
 
 if ($stmt) {
 
-    $stmt->bind_param("i", $user_id);
+    $stmt->bind_param("iss", $user_id, $today, $advance_cutoff_date);
 
     $stmt->execute();
 
@@ -401,7 +494,7 @@ if ($stmt) {
             </h1>
 
             <p class="page-header-subtitle">
-                Create inspection schedules for coaches due within next 7 days.
+                Create inspection schedules for overdue coaches and coaches due within next 3 days.
             </p>
 
         </div>
@@ -429,7 +522,7 @@ if ($stmt) {
             <form method="GET"
                   class="row g-2 align-items-end">
 
-                <div class="col-lg-4 col-md-6">
+                <div class="col-lg-6 col-md-6">
 
                     <label class="form-label">
                         Filter by Train
@@ -459,20 +552,7 @@ if ($stmt) {
 
                 </div>
 
-                <div class="col-lg-4 col-md-6">
-
-                    <label class="form-label">
-                        Due Before Date
-                    </label>
-
-                    <input type="date"
-                           class="form-control"
-                           name="due_date"
-                           value="<?php echo e($selected_date); ?>">
-
-                </div>
-
-                <div class="col-lg-2 col-md-6 d-grid">
+                <div class="col-lg-3 col-md-6 d-grid">
 
                     <button class="btn btn-primary"
                             type="submit">
@@ -484,7 +564,7 @@ if ($stmt) {
 
                 </div>
 
-                <div class="col-lg-2 col-md-6 d-grid">
+                <div class="col-lg-3 col-md-6 d-grid">
 
                     <a class="btn btn-outline-secondary"
                        href="<?php echo basename($_SERVER['PHP_SELF']); ?>">
@@ -517,7 +597,7 @@ if ($stmt) {
                         Upcoming Inspection Due Coaches
 
                         <small class="text-muted">
-                            (<?php echo e($today); ?> to <?php echo e($selected_date); ?>)
+                            (Overdue to <?php echo e($selected_date); ?>)
                         </small>
 
                     </h5>
@@ -553,7 +633,7 @@ if ($stmt) {
                                     <td colspan="5"
                                         class="text-center text-muted py-4">
 
-                                        No coaches due within selected date range.
+                                        No overdue coaches or coaches due within next 3 days.
 
                                     </td>
 
@@ -589,13 +669,13 @@ if ($stmt) {
 
                                             <strong>
 
-                                                <?php echo e($coach['train_no']); ?>
+                                                <?php echo e($coach['train_no'] ?: 'Detached'); ?>
 
                                             </strong>
 
                                             <br>
 
-                                            <?php echo e($coach['train_name']); ?>
+                                            <?php echo e($coach['train_name'] ?: '-'); ?>
 
                                         </td>
 
@@ -610,10 +690,11 @@ if ($stmt) {
                                             <button
                                                 type="button"
                                                 class="btn btn-sm btn-primary"
-                                                onclick="openScheduleModal(
-                                                    '<?php echo e($coach['train_info_id']); ?>',
-                                                    '<?php echo e($coach['coach_no']); ?>',
-                                                    '<?php echo e($coach['next_inspection_date']); ?>'
+	                                                onclick="openScheduleModal(
+                                                    '<?php echo e($coach['coach_id']); ?>',
+	                                                    '<?php echo e($coach['train_info_id']); ?>',
+	                                                    '<?php echo e($coach['coach_no']); ?>',
+	                                                    '<?php echo e($coach['next_inspection_date']); ?>'
                                                 )"
                                                 data-bs-toggle="modal"
                                                 data-bs-target="#scheduleModal">
@@ -810,9 +891,13 @@ if ($stmt) {
                        name="action"
                        value="create_schedule">
 
-                <input type="hidden"
-                       name="train_info_id"
-                       id="trainInfoId">
+	                <input type="hidden"
+	                       name="train_info_id"
+	                       id="trainInfoId">
+
+	                <input type="hidden"
+	                       name="coach_id"
+	                       id="coachId">
 
                 <div class="modal-body p-4">
 
@@ -822,7 +907,7 @@ if ($stmt) {
 
                             <div class="row g-3">
 
-                                <div class="col-md-4">
+	                                <div class="col-md-6">
 
                                     <label class="form-label text-muted small">
                                         Coach Number
@@ -831,35 +916,21 @@ if ($stmt) {
                                     <input type="text"
                                            class="form-control fw-bold"
                                            id="coachNo"
-                                           name="coach_no"
                                            readonly>
 
                                 </div>
 
-                                <div class="col-md-4">
+	                                <div class="col-md-6">
 
                                     <label class="form-label text-muted small">
-                                        Last Inspection Date
+                                        Next Inspection Date
                                     </label>
 
-                                    <input type="date"
-                                           class="form-control"
-                                           name="last_inspection_date"
-                                           value="<?php echo e($today); ?>">
-
-                                </div>
-
-                                <div class="col-md-4">
-
-                                    <label class="form-label text-muted small">
-                                        Next Due Date
-                                    </label>
-
-                                    <input type="date"
-                                           class="form-control fw-bold text-danger"
-                                           id="nextDueDate"
-                                           name="next_due_date"
-                                           readonly>
+	                                    <input type="date"
+	                                           class="form-control fw-bold text-danger"
+	                                           id="nextDueDate"
+	                                           name="next_due_date"
+	                                           required>
 
                                 </div>
 
@@ -911,10 +982,11 @@ if ($stmt) {
                                 Assignment Date & Time
                             </label>
 
-                            <input type="datetime-local"
-                                   class="form-control"
-                                   name="assignment_date_time"
-                                   required>
+	                            <input type="datetime-local"
+	                                   class="form-control"
+	                                   id="assignmentDateTime"
+	                                   name="assignment_date_time"
+	                                   required>
 
                         </div>
 
@@ -1023,10 +1095,21 @@ if ($stmt) {
 
 <script>
 
-function openScheduleModal(trainInfoId, coachNo, nextDueDate) {
+function openScheduleModal(coachId, trainInfoId, coachNo, nextDueDate) {
+    document.getElementById('coachId').value = coachId;
     document.getElementById('trainInfoId').value = trainInfoId;
     document.getElementById('coachNo').value = coachNo;
-    document.getElementById('nextDueDate').value = nextDueDate;
+
+    const assignmentDateTime = document.getElementById('assignmentDateTime');
+    const nextDueDateInput = document.getElementById('nextDueDate');
+    const dueDate = new Date(nextDueDate + 'T10:00:00');
+    const futureDate = new Date(dueDate);
+
+    futureDate.setDate(futureDate.getDate() + 1);
+
+    assignmentDateTime.value = nextDueDate + 'T10:00';
+    nextDueDateInput.min = futureDate.toISOString().slice(0, 10);
+    nextDueDateInput.value = '';
 }
 
 </script>
