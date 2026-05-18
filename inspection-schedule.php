@@ -19,6 +19,12 @@ function e($value)
 $message = '';
 $message_type = '';
 
+if (isset($_SESSION['flash_message'])) {
+    $message = $_SESSION['flash_message'];
+    $message_type = $_SESSION['flash_type'] ?? 'success';
+    unset($_SESSION['flash_message'], $_SESSION['flash_type']);
+}
+
 $today = date('Y-m-d');
 $next_week = date('Y-m-d', strtotime('+7 days'));
 
@@ -43,6 +49,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $assignment_date_time = trim($_POST['assignment_date_time'] ?? '');
         $priority = $_POST['priority'] ?? 'Normal';
         $special_remarks = trim($_POST['special_remarks'] ?? '');
+
+        if ($assignment_date_time !== '') {
+            $assignment_date_time = str_replace('T', ' ', $assignment_date_time);
+
+            if (strlen($assignment_date_time) === 16) {
+                $assignment_date_time .= ':00';
+            }
+        }
 
         $last_inspection_date = !empty($_POST['last_inspection_date'])
             ? $_POST['last_inspection_date']
@@ -83,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $conn->prepare($insert_query);
 
             if (!$stmt) {
-                $message = "SQL Error: " . $conn->error;
+                $message = "Schedule Insert SQL Error: " . $conn->error;
                 $message_type = "danger";
             } else {
 
@@ -100,38 +114,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $user_id
                 );
 
-              if ($stmt->execute()) {
+                if ($stmt->execute()) {
 
-    $updateCoachQuery = "UPDATE fdss_train_coach
-                         SET schedule_status = 1
-                         WHERE train_info_id = ?
-                         AND coach_no = ?
-                         AND user_id = ?";
+                    $updateCoachQuery = "UPDATE fdss_train_coach
+                                         SET schedule_status = 1
+                                         WHERE train_info_id = ?
+                                         AND coach_no = ?
+                                         AND user_id = ?";
 
-    $updateStmt = $conn->prepare($updateCoachQuery);
+                    $updateStmt = $conn->prepare($updateCoachQuery);
 
-    if ($updateStmt) {
+                    if ($updateStmt) {
 
-        $updateStmt->bind_param(
-            "isi",
-            $train_info_id,
-            $coach_no,
-            $user_id
-        );
+                        $updateStmt->bind_param(
+                            "isi",
+                            $train_info_id,
+                            $coach_no,
+                            $user_id
+                        );
 
-        $updateStmt->execute();
+                        if ($updateStmt->execute()) {
 
-        $updateStmt->close();
-    }
+                            if ($updateStmt->affected_rows > 0) {
+                                $_SESSION['flash_message'] = "Inspection schedule created successfully!";
+                                $_SESSION['flash_type'] = "success";
+                            } else {
+                                $_SESSION['flash_message'] = "Schedule created, but coach status was not updated. Please check train_info_id, coach_no, or user_id.";
+                                $_SESSION['flash_type'] = "warning";
+                            }
 
-    $message = "Inspection schedule created successfully!";
-    $message_type = "success";
+                        } else {
+                            $_SESSION['flash_message'] = "Schedule created, but coach status update failed: " . $updateStmt->error;
+                            $_SESSION['flash_type'] = "warning";
+                        }
 
-} else {
+                        $updateStmt->close();
 
-    $message = "Error creating schedule: " . $stmt->error;
-    $message_type = "danger";
-} 
+                    } else {
+                        $_SESSION['flash_message'] = "Schedule created, but coach update SQL failed: " . $conn->error;
+                        $_SESSION['flash_type'] = "warning";
+                    }
+
+                    $stmt->close();
+
+                    header("Location: " . $_SERVER['PHP_SELF']);
+                    exit;
+
+                } else {
+                    $message = "Error creating schedule: " . $stmt->error;
+                    $message_type = "danger";
+                }
 
                 $stmt->close();
             }
@@ -223,9 +255,9 @@ $query = "SELECT
           FROM fdss_train_coach c
           INNER JOIN fdss_train_information t
             ON t.train_info_id = c.train_info_id
-       WHERE c.user_id = ?
-AND c.schedule_status = 0
-AND c.next_inspection_date IS NOT NULL
+          WHERE c.user_id = ?
+          AND c.schedule_status = 0
+          AND c.next_inspection_date IS NOT NULL
           AND c.next_inspection_date BETWEEN ? AND ?";
 
 if ($selected_train !== 'all') {
@@ -269,6 +301,10 @@ if ($stmt) {
     }
 
     $stmt->close();
+
+} else {
+    $message = "Coach Fetch SQL Error: " . $conn->error;
+    $message_type = "danger";
 }
 
 /*
@@ -572,6 +608,7 @@ if ($stmt) {
                                         <td>
 
                                             <button
+                                                type="button"
                                                 class="btn btn-sm btn-primary"
                                                 onclick="openScheduleModal(
                                                     '<?php echo e($coach['train_info_id']); ?>',
@@ -702,8 +739,8 @@ if ($stmt) {
                                             <?php
                                             $priority_class =
                                                 ($schedule['priority'] === 'High')
-                                                ? 'badge-danger'
-                                                : 'badge-info';
+                                                ? 'bg-danger'
+                                                : 'bg-info';
                                             ?>
 
                                             <span class="badge <?php echo $priority_class; ?>">
@@ -738,8 +775,6 @@ if ($stmt) {
 
 </div>
 
-<!-- Schedule Modal -->
-
 <div class="modal fade"
      id="scheduleModal"
      tabindex="-1">
@@ -748,7 +783,7 @@ if ($stmt) {
 
         <div class="modal-content border-0 shadow-lg">
 
-            <div class="modal-header  text-white" style=" background-color: #61a2cb;">
+            <div class="modal-header text-white" style="background-color: #61a2cb;">
 
                 <div>
 
@@ -780,8 +815,6 @@ if ($stmt) {
                        id="trainInfoId">
 
                 <div class="modal-body p-4">
-
-                    <!-- Coach Info Card -->
 
                     <div class="card border-0 bg-light mb-4">
 
@@ -836,8 +869,6 @@ if ($stmt) {
 
                     </div>
 
-                    <!-- Auditor Section -->
-
                     <div class="row g-3">
 
                         <div class="col-md-6">
@@ -889,8 +920,6 @@ if ($stmt) {
 
                     </div>
 
-                    <!-- Priority + Remarks -->
-
                     <div class="row g-3 mt-1">
 
                         <div class="col-md-4">
@@ -928,8 +957,6 @@ if ($stmt) {
                         </div>
 
                     </div>
-
-                    <!-- Info Box -->
 
                     <div class="alert alert-info mt-4 mb-0">
 
@@ -996,16 +1023,9 @@ if ($stmt) {
 
 <script>
 
-function openScheduleModal(
-    trainInfoId,
-    coachNo,
-    nextDueDate
-) {
-
+function openScheduleModal(trainInfoId, coachNo, nextDueDate) {
     document.getElementById('trainInfoId').value = trainInfoId;
-
     document.getElementById('coachNo').value = coachNo;
-
     document.getElementById('nextDueDate').value = nextDueDate;
 }
 

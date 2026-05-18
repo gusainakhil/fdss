@@ -11,11 +11,15 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = (int) $_SESSION['user_id'];
 
-$train_info_id = (int) ($_GET['train_info_id'] ?? 0);
+$train_info_id = isset($_GET['train_info_id']) ? (int) $_GET['train_info_id'] : 0;
 $coach_no = trim($_GET['coach_no'] ?? '');
 
-if ($train_info_id <= 0 || $coach_no === '') {
+if ($train_info_id < 0 || $coach_no === '') {
     die("Invalid coach details.");
+}
+
+if ($train_info_id <= 0) {
+    $train_info_id = null;
 }
 
 $message = '';
@@ -35,18 +39,29 @@ $coach_query = "SELECT
                     c.coach_no,
                     c.coach_type,
                     c.status,
+                    c.train_info_id,
                     t.train_no,
                     t.train_name
                 FROM fdss_train_coach c
-                INNER JOIN fdss_train_information t 
+                LEFT JOIN fdss_train_information t 
                     ON t.train_info_id = c.train_info_id
-                WHERE c.train_info_id = ?
-                AND c.coach_no = ?
-                AND c.user_id = ?
-                LIMIT 1";
+                WHERE c.coach_no = ?
+                AND c.user_id = ?";
+
+if ($train_info_id !== null) {
+    $coach_query .= " AND c.train_info_id = ?";
+}
+
+$coach_query .= "\n                LIMIT 1";
 
 $stmt = $conn->prepare($coach_query);
-$stmt->bind_param("isi", $train_info_id, $coach_no, $user_id);
+
+if ($train_info_id !== null) {
+    $stmt->bind_param("sii", $coach_no, $user_id, $train_info_id);
+} else {
+    $stmt->bind_param("si", $coach_no, $user_id);
+}
+
 $stmt->execute();
 
 $coach_result = $stmt->get_result();
@@ -333,19 +348,33 @@ $inventory_items = [];
 $list_query = "SELECT ci.*, m.company_name
                FROM fdss_coach_inventory ci
                LEFT JOIN fdss_manufacturers m ON ci.manufacturer_id = m.manufacturer_id
-               WHERE ci.train_info_id = ?
-               AND ci.coach_no = ?
-               AND ci.user_id = ?
-               ORDER BY ci.coach_inventory_id DESC";
+               WHERE ci.coach_no = ?
+               AND ci.user_id = ?";
+
+if ($train_info_id !== null) {
+    $list_query .= "\n               AND ci.train_info_id = ?";
+} else {
+    $list_query .= "\n               AND ci.train_info_id IS NULL";
+}
+
+$list_query .= "\n               ORDER BY ci.coach_inventory_id DESC";
 
 $stmt = $conn->prepare($list_query);
 
-$stmt->bind_param(
-    "isi",
-    $train_info_id,
-    $coach_no,
-    $user_id
-);
+if ($train_info_id !== null) {
+    $stmt->bind_param(
+        "isi",
+        $coach_no,
+        $user_id,
+        $train_info_id
+    );
+} else {
+    $stmt->bind_param(
+        "si",
+        $coach_no,
+        $user_id
+    );
+}
 
 $stmt->execute();
 
@@ -482,9 +511,11 @@ $stmt->close();
 
                             <strong>
 
-                                <?php echo e($coach['train_no']); ?>
-                                -
-                                <?php echo e($coach['train_name']); ?>
+                                <?php if (!empty($coach['train_info_id']) && !empty($coach['train_no'])): ?>
+                                    <?php echo e($coach['train_no']); ?> - <?php echo e($coach['train_name']); ?>
+                                <?php else: ?>
+                                    Detached
+                                <?php endif; ?>
 
                             </strong>
 
@@ -618,11 +649,11 @@ $stmt->close();
 
                                     <?php echo e($coach['coach_no']); ?>
 
-                                    (Train:
-
-                                    <?php echo e($coach['train_no']); ?>
-
-                                    )
+                                    <?php if (!empty($coach['train_info_id']) && !empty($coach['train_no'])): ?>
+                                        (Train: <?php echo e($coach['train_no']); ?>)
+                                    <?php else: ?>
+                                        (Detached)
+                                    <?php endif; ?>
 
                                 </td>
 

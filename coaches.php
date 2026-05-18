@@ -17,24 +17,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'add_coach') {
-        $train_info_id = (int) ($_POST['train_info_id'] ?? 0);
+        $train_info_id = (int) ($_POST['train_info_id'] ?? 0) ?: null;
         $coach_no = trim($_POST['coach_no'] ?? '');
         $coach_type = trim($_POST['coach_type'] ?? '');
         $status = $_POST['status'] ?? 'Active';
         $next_inspection_date = !empty($_POST['next_inspection_date']) ? $_POST['next_inspection_date'] : null;
 
-        if ($train_info_id <= 0 || $coach_no === '') {
+        if ($coach_no === '') {
             $message = "Please fill all required fields.";
             $message_type = "danger";
         } else {
-            $check_query = "SELECT coach_id FROM fdss_train_coach WHERE train_info_id = ? AND coach_no = ?";
+            $check_query = "SELECT coach_id FROM fdss_train_coach WHERE coach_no = ? AND user_id = ?";
             $check_stmt = $conn->prepare($check_query);
-            $check_stmt->bind_param("is", $train_info_id, $coach_no);
+            $check_stmt->bind_param("si", $coach_no, $user_id);
             $check_stmt->execute();
             $check_result = $check_stmt->get_result();
 
             if ($check_result->num_rows > 0) {
-                $message = "This coach already exists for selected train.";
+                $message = "This coach already exists.";
                 $message_type = "danger";
             } else {
                 $insert_query = "INSERT INTO fdss_train_coach 
@@ -61,35 +61,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     elseif ($action === 'edit_coach') {
         $coach_id = (int) ($_POST['coach_id'] ?? 0);
-        $train_info_id = (int) ($_POST['train_info_id'] ?? 0);
         $coach_no = trim($_POST['coach_no'] ?? '');
         $coach_type = trim($_POST['coach_type'] ?? '');
         $status = $_POST['status'] ?? 'Active';
         $next_inspection_date = !empty($_POST['next_inspection_date']) ? $_POST['next_inspection_date'] : null;
 
         $check_query = "SELECT coach_id FROM fdss_train_coach 
-                        WHERE train_info_id = ? AND coach_no = ? AND coach_id != ?";
+                        WHERE coach_no = ? AND user_id = ? AND coach_id != ?";
         $check_stmt = $conn->prepare($check_query);
-        $check_stmt->bind_param("isi", $train_info_id, $coach_no, $coach_id);
+        $check_stmt->bind_param("sii", $coach_no, $user_id, $coach_id);
         $check_stmt->execute();
         $check_result = $check_stmt->get_result();
 
         if ($check_result->num_rows > 0) {
-            $message = "This coach already exists for selected train.";
+            $message = "This coach already exists.";
             $message_type = "danger";
         } else {
             $update_query = "UPDATE fdss_train_coach 
-                SET train_info_id = ?, coach_no = ?, coach_type = ?, status = ?, next_inspection_date = ?
+                SET coach_no = ?, coach_type = ?, status = ?, next_inspection_date = ?
                 WHERE coach_id = ? AND user_id = ?";
 
             $stmt = $conn->prepare($update_query);
-            $stmt->bind_param("issssii", $train_info_id, $coach_no, $coach_type, $status, $next_inspection_date, $coach_id, $user_id);
+            $stmt->bind_param("ssssii", $coach_no, $coach_type, $status, $next_inspection_date, $coach_id, $user_id);
 
             if ($stmt->execute()) {
                 $message = "Coach updated successfully!";
                 $message_type = "success";
             } else {
-                $message = "Error updating coach.";
+                $message = "Error updating coach: " . $stmt->error;
                 $message_type = "danger";
             }
 
@@ -115,6 +114,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $stmt->close();
+    }
+
+    elseif ($action === 'assign_train') {
+        $coach_id = (int) ($_POST['coach_id'] ?? 0);
+        $train_info_id = (int) ($_POST['train_info_id'] ?? 0) ?: null;
+
+        if ($coach_id > 0) {
+            $assign_query = "UPDATE fdss_train_coach SET train_info_id = ? WHERE coach_id = ? AND user_id = ?";
+            $stmt = $conn->prepare($assign_query);
+            $stmt->bind_param("iii", $train_info_id, $coach_id, $user_id);
+
+            if ($stmt->execute()) {
+                $message = "Train assignment updated successfully!";
+                $message_type = "success";
+            } else {
+                $message = "Error updating train assignment.";
+                $message_type = "danger";
+            }
+
+            $stmt->close();
+        }
     }
 }
 
@@ -157,21 +177,25 @@ $query = "SELECT
                 THEN 1 ELSE 0 
             END) AS expire_soon
           FROM fdss_train_coach c
-          INNER JOIN fdss_train_information t ON c.train_info_id = t.train_info_id
+          LEFT JOIN fdss_train_information t ON c.train_info_id = t.train_info_id
           LEFT JOIN fdss_coach_inventory ci 
             ON ci.train_info_id = c.train_info_id 
             AND ci.coach_no = c.coach_no
           WHERE c.user_id = ?";
 
 if ($selected_train !== 'all') {
-    $query .= " AND c.train_info_id = ?";
+    if ($selected_train === 'Detached') {
+        $query .= " AND c.train_info_id IS NULL";
+    } else {
+        $query .= " AND c.train_info_id = ?";
+    }
 }
 
 $query .= " GROUP BY c.coach_id ORDER BY c.coach_id DESC";
 
 $stmt = $conn->prepare($query);
 
-if ($selected_train !== 'all') {
+if ($selected_train !== 'all' && $selected_train !== 'Detached') {
     $selected_train_id = (int) $selected_train;
     $stmt->bind_param("ii", $user_id, $selected_train_id);
 } else {
@@ -202,6 +226,16 @@ function e($value) {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.0/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="assets/css/styles.css" rel="stylesheet">
+    <style>
+        .table-hover th,
+        .table-hover td {
+            text-align: center;
+            vertical-align: middle;
+        }
+        .table-hover td form {
+            margin-bottom: 0;
+        }
+    </style>
 </head>
 <body>
 
@@ -237,12 +271,32 @@ function e($value) {
                         <label for="trainFilter" class="form-label">Select Train Number</label>
                         <select id="trainFilter" name="train_info_id" class="form-select" onchange="this.form.submit()">
                             <option value="all">All Trains</option>
+                            <option value="Detached" <?php echo $selected_train === 'Detached' ? 'selected' : ''; ?>>Detached</option>
                             <?php foreach ($trains as $train): ?>
                                 <option value="<?php echo e($train['train_info_id']); ?>" 
                                     <?php echo ((string)$selected_train === (string)$train['train_info_id']) ? 'selected' : ''; ?>>
                                     <?php echo e($train['train_no'] . ' - ' . $train['train_name']); ?>
                                 </option>
                             <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="coachFilter" class="form-label">Filter Coach</label>
+                        <select id="coachFilter" class="form-select">
+                            <option value="">All Coaches</option>
+                            <option value="Detached">Detached</option>
+                            <?php foreach ($coaches as $coach): ?>
+                                <option value="<?php echo e($coach['coach_no']); ?>"><?php echo e($coach['coach_no']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="rowCountSelect" class="form-label">Show Rows</label>
+                        <select id="rowCountSelect" class="form-select">
+                            <option value="10">10</option>
+                            <option value="20">20</option>
+                            <option value="30">30</option>
+                            <option value="0">All</option>
                         </select>
                     </div>
                 </form>
@@ -265,11 +319,12 @@ function e($value) {
                                 <th>Coach No.</th>
                                 <th>Coach Type</th>
                                 <th>Train Assigned</th>
+                                <th>Assign Train</th>
                                 <th>Total Components</th>
                                 <th>Active Components</th>
                                 <th>Expired Components</th>
                                 <th>Expire Soon</th>
-                                <th>Status Detached / Intact </th>
+                                <!-- <th>Status Detached / Intact </th> -->
                                 <th>Next Inspection</th>
                                 <th>Actions</th>
                             </tr>
@@ -277,7 +332,7 @@ function e($value) {
                         <tbody>
                         <?php if (empty($coaches)): ?>
                             <tr>
-                                <td colspan="10" class="text-center text-muted py-4">
+                                <td colspan="11" class="text-center text-muted py-4">
                                     No coaches found. Click "Add Coach" to create one.
                                 </td>
                             </tr>
@@ -293,15 +348,30 @@ function e($value) {
                                         </a>
                                     </td>
                                     <td><?php echo e($coach['coach_type'] ?: '-'); ?></td>
-                                    <td><?php echo e($coach['train_no'] . ' - ' . $coach['train_name']); ?></td>
+                                    <td><?php echo e($coach['train_info_id'] ? $coach['train_no'] . ' - ' . $coach['train_name'] : 'Detached'); ?></td>
+                                    <td>
+                                        <form method="POST" class="d-flex gap-1">
+                                            <input type="hidden" name="action" value="assign_train">
+                                            <input type="hidden" name="coach_id" value="<?php echo e($coach['coach_id']); ?>">
+                                            <select name="train_info_id" class="form-select form-select-sm">
+                                                <option value="">Detached</option>
+                                                <?php foreach ($trains as $train): ?>
+                                                    <option value="<?php echo e($train['train_info_id']); ?>" <?php echo ($coach['train_info_id'] == $train['train_info_id']) ? 'selected' : ''; ?>>
+                                                        <?php echo e($train['train_no'] . ' - ' . $train['train_name']); ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                                        </form>
+                                    </td>
                                     <td><?php echo e($coach['total_inventory'] ?? 0); ?></td>
                                     <td><span class="badge badge-success"><?php echo e($coach['active_inventory'] ?? 0); ?></span></td>
                                     <td><span class="badge badge-danger"><?php echo e($coach['expired_inventory'] ?? 0); ?></span></td>
                                     <td><span class="badge badge-warning"><?php echo e($coach['expire_soon'] ?? 0); ?></span></td>
-                                    <td>
+                                    <!-- <td>
                                         <?php $status_class = ($coach['status'] === 'Active') ? 'badge-success' : 'badge-danger'; ?>
                                         <span class="badge <?php echo $status_class; ?>"><?php echo e($coach['status']); ?></span>
-                                    </td>
+                                    </td> -->
                                     <td>
                                         <?php echo $coach['next_inspection_date'] ? e(date('Y-m-d', strtotime($coach['next_inspection_date']))) : '-'; ?>
                                     </td>
@@ -316,7 +386,6 @@ function e($value) {
                                             class="btn btn-sm btn-outline-primary"
                                             onclick="editCoach(
                                                 '<?php echo e($coach['coach_id']); ?>',
-                                                '<?php echo e($coach['train_info_id']); ?>',
                                                 '<?php echo e($coach['coach_no']); ?>',
                                                 '<?php echo e($coach['coach_type']); ?>',
                                                 '<?php echo e($coach['status']); ?>',
@@ -373,18 +442,6 @@ function e($value) {
                     </div>
 
                     <div class="form-group mb-3">
-                        <label class="form-label">Train Assignment <span class="text-danger">*</span></label>
-                        <select class="form-select" id="trainInfoId" name="train_info_id" required>
-                            <option value="">Select Train</option>
-                            <?php foreach ($trains as $train): ?>
-                                <option value="<?php echo e($train['train_info_id']); ?>">
-                                    <?php echo e($train['train_no'] . ' - ' . $train['train_name']); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <div class="form-group mb-3">
                         <label class="form-label">Status <span class="text-danger">*</span></label>
                         <select class="form-select" id="coachStatus" name="status" required>
                             <option value="Active">Active</option>
@@ -428,7 +485,6 @@ function resetCoachForm() {
     document.getElementById('coachId').value = '';
     document.getElementById('coachNo').value = '';
     document.getElementById('coachType').value = '';
-    document.getElementById('trainInfoId').value = '';
     document.getElementById('coachStatus').value = 'Active';
     document.getElementById('nextInspectionDate').value = '';
 
@@ -437,9 +493,8 @@ function resetCoachForm() {
     submitCoachBtn.textContent = 'Add Coach';
 }
 
-function editCoach(id, trainInfoId, coachNo, coachType, status, nextInspectionDate) {
+function editCoach(id, coachNo, coachType, status, nextInspectionDate) {
     document.getElementById('coachId').value = id;
-    document.getElementById('trainInfoId').value = trainInfoId;
     document.getElementById('coachNo').value = coachNo;
     document.getElementById('coachType').value = coachType;
     document.getElementById('coachStatus').value = status;
@@ -458,6 +513,47 @@ function deleteCoach(id) {
 }
 
 addCoachBtn.addEventListener('click', resetCoachForm);
+
+const coachFilter = document.getElementById('coachFilter');
+const rowCountSelect = document.getElementById('rowCountSelect');
+
+function applyCoachFilters() {
+    const filterValue = coachFilter ? coachFilter.value : '';
+    const pageSize = rowCountSelect ? parseInt(rowCountSelect.value, 10) : 0;
+    const rows = Array.from(document.querySelectorAll('table.table tbody tr'));
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+        const coachNoCell = row.querySelector('td:first-child');
+        const trainAssignedCell = row.querySelector('td:nth-child(3)');
+        const coachNo = coachNoCell ? coachNoCell.textContent.trim() : '';
+        const trainAssigned = trainAssignedCell ? trainAssignedCell.textContent.trim() : '';
+        let matches = true;
+
+        if (filterValue === 'Detached') {
+            matches = trainAssigned === 'Detached';
+        } else if (filterValue) {
+            matches = coachNo === filterValue;
+        }
+
+        if (matches) {
+            visibleCount += 1;
+            row.style.display = (pageSize > 0 && visibleCount > pageSize) ? 'none' : '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+if (coachFilter) {
+    coachFilter.addEventListener('change', applyCoachFilters);
+}
+
+if (rowCountSelect) {
+    rowCountSelect.addEventListener('change', applyCoachFilters);
+}
+
+applyCoachFilters();
 
 coachModalEl.addEventListener('hidden.bs.modal', resetCoachForm);
 </script>
