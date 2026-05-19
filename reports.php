@@ -1,3 +1,308 @@
+<?php
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+require_once 'config/db.php';
+
+mysqli_report(MYSQLI_REPORT_OFF);
+
+if (!isset($_SESSION['user_id'])) {
+    header('Location: login.php');
+    exit;
+}
+
+$user_id = (int) $_SESSION['user_id'];
+
+function e($value)
+{
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+}
+
+function display_value($value)
+{
+    $value = trim((string) $value);
+    return $value !== '' ? $value : '-';
+}
+
+function format_report_date($value)
+{
+    return $value ? date('d M Y', strtotime($value)) : '-';
+}
+
+function format_report_time($value)
+{
+    return $value ? date('h:i A', strtotime($value)) : '-';
+}
+
+function status_badge($status)
+{
+    if ($status === 'Completed') {
+        return '<span class="status-completed">Completed</span>';
+    }
+
+    if ($status === 'In Progress') {
+        return '<span class="status-inprogress">In Progress</span>';
+    }
+
+    return '<span class="status-pending">' . e($status ?: 'Pending') . '</span>';
+}
+
+function condition_badge_class($condition)
+{
+    $condition = strtolower(trim((string) $condition));
+
+    if (in_array($condition, ['ok', 'good', 'working', 'active'], true)) {
+        return 'badge-ok';
+    }
+
+    if (in_array($condition, ['issue', 'faulty', 'bad', 'not working', 'failed'], true)) {
+        return 'badge-issue';
+    }
+
+    return 'badge-na';
+}
+
+$today = date('Y-m-d');
+$selected_date = trim($_GET['date'] ?? $today);
+
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $selected_date)) {
+    $selected_date = $today;
+}
+
+$selected_train_filter = trim($_GET['train_info_id'] ?? '');
+$is_direct_train_search = in_array($selected_train_filter, ['Detached', 'no_train'], true);
+$selected_train = (!$is_direct_train_search && ctype_digit($selected_train_filter))
+    ? (int) $selected_train_filter
+    : 0;
+$selected_coach = (int) ($_GET['coach_id'] ?? 0);
+$selected_report_id = (int) ($_GET['report_id'] ?? 0);
+
+$train_options = [];
+$train_stmt = $conn->prepare("
+    SELECT train_info_id, train_no, train_name
+    FROM fdss_train_information
+    WHERE user_id = ?
+    ORDER BY train_no ASC
+");
+
+if ($train_stmt) {
+    $train_stmt->bind_param("i", $user_id);
+    $train_stmt->execute();
+    $train_result = $train_stmt->get_result();
+
+    while ($row = $train_result->fetch_assoc()) {
+        $train_options[] = $row;
+    }
+
+    $train_stmt->close();
+}
+
+$coach_options = [];
+$coach_query = "SELECT coach_id, coach_no, coach_type
+                FROM fdss_train_coach
+                WHERE user_id = ?";
+$coach_types = "i";
+$coach_values = [$user_id];
+
+if ($selected_train > 0) {
+    $coach_query .= " AND train_info_id = ?";
+    $coach_types .= "i";
+    $coach_values[] = $selected_train;
+} elseif ($is_direct_train_search) {
+    $coach_query .= " AND train_info_id IS NULL";
+}
+
+$coach_query .= " ORDER BY coach_no ASC";
+$coach_stmt = $conn->prepare($coach_query);
+
+if ($coach_stmt) {
+    $coach_references = [];
+
+    foreach ($coach_values as $key => $value) {
+        $coach_references[$key] = &$coach_values[$key];
+    }
+
+    $coach_stmt->bind_param($coach_types, ...$coach_references);
+    $coach_stmt->execute();
+    $coach_result = $coach_stmt->get_result();
+
+    while ($row = $coach_result->fetch_assoc()) {
+        $coach_options[] = $row;
+    }
+
+    $coach_stmt->close();
+}
+
+$where_clause = "WHERE i.user_id = ? AND DATE(i.created_at) = ?";
+$bind_types = "is";
+$bind_values = [$user_id, $selected_date];
+
+if ($selected_train > 0) {
+    $where_clause .= " AND i.train_info_id = ?";
+    $bind_types .= "i";
+    $bind_values[] = $selected_train;
+} elseif ($is_direct_train_search) {
+    $where_clause .= " AND (i.train_info_id IS NULL OR i.train_info_id = 0)";
+}
+
+if ($selected_coach > 0) {
+    $where_clause .= " AND i.coach_id = ?";
+    $bind_types .= "i";
+    $bind_values[] = $selected_coach;
+}
+
+$reports = [];
+$reports_query = "
+    SELECT
+        MIN(i.inspection_id) AS report_id,
+        i.schedule_id,
+        i.train_info_id,
+        i.coach_id,
+        i.auditor_id,
+        DATE(MIN(i.created_at)) AS inspection_date,
+        MIN(i.created_at) AS start_time,
+        MAX(i.updated_at) AS end_time,
+        COALESCE(MAX(s.status), 'Pending') AS report_status,
+        COUNT(*) AS tool_count,
+        MAX(t.train_no) AS train_no,
+        MAX(t.train_name) AS train_name,
+        MAX(c.coach_no) AS coach_no,
+        MAX(c.coach_type) AS coach_type,
+        MAX(u.user_name) AS auditor_user_name,
+        MAX(u.full_name) AS auditor_full_name
+    FROM fdds_coach_inspection i
+    LEFT JOIN fdss_train_information t ON t.train_info_id = i.train_info_id
+    LEFT JOIN fdss_train_coach c ON c.coach_id = i.coach_id
+    LEFT JOIN fdss_users u ON u.user_id = i.auditor_id
+    LEFT JOIN fdss_coach_schedule s ON s.schedule_id = i.schedule_id
+    $where_clause
+    GROUP BY
+        COALESCE(i.schedule_id, 0),
+        i.train_info_id,
+        i.coach_id,
+        i.auditor_id,
+        DATE(i.created_at)
+    ORDER BY start_time DESC
+";
+
+$reports_stmt = $conn->prepare($reports_query);
+
+if ($reports_stmt) {
+    $bind_references = [];
+
+    foreach ($bind_values as $key => $value) {
+        $bind_references[$key] = &$bind_values[$key];
+    }
+
+    $reports_stmt->bind_param($bind_types, ...$bind_references);
+    $reports_stmt->execute();
+    $reports_result = $reports_stmt->get_result();
+
+    while ($row = $reports_result->fetch_assoc()) {
+        $reports[] = $row;
+    }
+
+    $reports_stmt->close();
+}
+
+$selected_report = null;
+$selected_tools = [];
+
+if ($selected_report_id > 0) {
+    $header_query = "
+        SELECT
+            i.*,
+            t.train_no,
+            t.train_name,
+            c.coach_no,
+            c.coach_type,
+            auditor.user_name AS auditor_user_name,
+            auditor.full_name AS auditor_full_name,
+            st.station_name,
+            d.division_name,
+            z.zone_name,
+            s.status AS schedule_status,
+            s.special_remarks
+        FROM fdds_coach_inspection i
+        LEFT JOIN fdss_coach_schedule s ON s.schedule_id = i.schedule_id
+        LEFT JOIN fdss_train_information t ON t.train_info_id = i.train_info_id
+        LEFT JOIN fdss_train_coach c ON c.coach_id = i.coach_id
+        LEFT JOIN fdss_users auditor ON auditor.user_id = i.auditor_id
+        LEFT JOIN fdss_users report_user ON report_user.user_id = i.user_id
+        LEFT JOIN fdss_stations st ON st.station_id = report_user.station_id
+        LEFT JOIN fdss_divisions d ON d.division_id = st.division_id
+        LEFT JOIN fdss_zones z ON z.zone_id = d.zone_id
+        WHERE i.inspection_id = ?
+        AND i.user_id = ?
+        LIMIT 1
+    ";
+
+    $header_stmt = $conn->prepare($header_query);
+
+    if ($header_stmt) {
+        $header_stmt->bind_param("ii", $selected_report_id, $user_id);
+        $header_stmt->execute();
+        $header_result = $header_stmt->get_result();
+        $selected_report = $header_result->fetch_assoc();
+        $header_stmt->close();
+    }
+
+    if ($selected_report) {
+        $tool_where = "WHERE i.user_id = ?";
+        $tool_types = "i";
+        $tool_values = [$user_id];
+
+        if (!empty($selected_report['schedule_id'])) {
+            $tool_where .= " AND i.schedule_id = ?";
+            $tool_types .= "i";
+            $tool_values[] = (int) $selected_report['schedule_id'];
+        } else {
+            $tool_where .= " AND i.train_info_id = ? AND i.coach_id = ? AND DATE(i.created_at) = ?";
+            $tool_types .= "iis";
+            $tool_values[] = (int) $selected_report['train_info_id'];
+            $tool_values[] = (int) $selected_report['coach_id'];
+            $tool_values[] = date('Y-m-d', strtotime($selected_report['created_at']));
+
+            if (!empty($selected_report['auditor_id'])) {
+                $tool_where .= " AND i.auditor_id = ?";
+                $tool_types .= "i";
+                $tool_values[] = (int) $selected_report['auditor_id'];
+            }
+        }
+
+        $tools_query = "
+            SELECT
+                i.tool_name,
+                i.Conditions,
+                i.remarks,
+                i.Serial_No AS serial_number
+            FROM fdds_coach_inspection i
+            $tool_where
+            ORDER BY i.inspection_id ASC
+        ";
+
+        $tools_stmt = $conn->prepare($tools_query);
+
+        if ($tools_stmt) {
+            $tool_references = [];
+
+            foreach ($tool_values as $key => $value) {
+                $tool_references[$key] = &$tool_values[$key];
+            }
+
+            $tools_stmt->bind_param($tool_types, ...$tool_references);
+            $tools_stmt->execute();
+            $tools_result = $tools_stmt->get_result();
+
+            while ($row = $tools_result->fetch_assoc()) {
+                $selected_tools[] = $row;
+            }
+
+            $tools_stmt->close();
+        }
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -246,57 +551,76 @@
             <!-- ── FILTER CARD ── -->
             <div class="content-card no-print mb-3">
                 <div class="card-body">
-                    <div class="row g-2 align-items-end">
+                    <form method="GET" class="row g-2 align-items-end">
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">Select Train No.</label>
-                            <select class="form-select" id="filterTrain">
+                            <select class="form-select"
+                                    name="train_info_id"
+                                    id="filterTrain"
+                                    onchange="document.getElementById('filterCoach').value=''; this.form.submit();">
                                 <option value="">-- All Trains --</option>
-                                <option value="12423 - Rajdhani Exp">12423 - Rajdhani Exp</option>
-                                <option value="12951 - Mumbai Rajdhani">12951 - Mumbai Rajdhani</option>
-                                <option value="12301 - Howrah Rajdhani">12301 - Howrah Rajdhani</option>
-                                <option value="12002 - Bhopal Shatabdi">12002 - Bhopal Shatabdi</option>
-                                <option value="22691 - Rajdhani Express">22691 - Rajdhani Express</option>
+                                <option value="Detached"
+                                        <?php echo $is_direct_train_search ? 'selected' : ''; ?>>
+                                    Detached
+                                </option>
+
+                                <?php foreach ($train_options as $train): ?>
+
+                                    <option value="<?php echo e($train['train_info_id']); ?>"
+                                            <?php echo !$is_direct_train_search && $selected_train === (int) $train['train_info_id'] ? 'selected' : ''; ?>>
+                                        <?php echo e($train['train_no'] . ' - ' . $train['train_name']); ?>
+                                    </option>
+
+                                <?php endforeach; ?>
+
                             </select>
                         </div>
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">Select Coach</label>
-                            <select class="form-select" id="filterCoach">
+                            <select class="form-select" name="coach_id" id="filterCoach">
                                 <option value="">-- All Coaches --</option>
-                                <option value="NR-204112 / B1">NR-204112 / B1</option>
-                                <option value="NR-193452 / A1">NR-193452 / A1</option>
-                                <option value="NR-182341 / S1">NR-182341 / S1</option>
-                                <option value="NR-271823 / S3">NR-271823 / S3</option>
-                                <option value="NR-301456 / H1">NR-301456 / H1</option>
+
+                                <?php foreach ($coach_options as $coach): ?>
+
+                                    <option value="<?php echo e($coach['coach_id']); ?>"
+                                            <?php echo $selected_coach === (int) $coach['coach_id'] ? 'selected' : ''; ?>>
+                                        <?php echo e($coach['coach_no'] . ($coach['coach_type'] ? ' / ' . $coach['coach_type'] : '')); ?>
+                                    </option>
+
+                                <?php endforeach; ?>
+
                             </select>
                         </div>
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">Date</label>
                             <div class="input-group">
-                                <input type="date" class="form-control" id="filterDate">
-                                <button class="btn btn-outline-secondary" id="btnToday" title="Select Today">
+                                <input type="date" class="form-control" name="date" id="filterDate" value="<?php echo e($selected_date); ?>">
+                                <a class="btn btn-outline-secondary" href="reports.php?date=<?php echo e($today); ?>" title="Select Today">
                                     <i class="bi bi-calendar-check"></i> Today
-                                </button>
+                                </a>
                             </div>
                         </div>
                         <div class="col-md-3">
-                            <button class="btn btn-primary w-100" onclick="searchReport()">
+                            <button class="btn btn-primary w-100" type="submit">
                                 <i class="bi bi-search"></i> Search Report
                             </button>
                         </div>
-                    </div>
+                    </form>
                 </div>
             </div>
 
             <!-- ── TODAY'S INSPECTIONS LIST ── -->
-            <div id="listSection" class="no-print">
+            <div id="listSection" class="no-print" style="<?php echo $selected_report ? 'display:none;' : ''; ?>">
                 <div class="content-card">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">
                             <i class="bi bi-clipboard2-check me-2 text-primary"></i>
-                            Today's Inspections
-                            <span class="today-badge ms-2" id="listDateLabel">09 May 2026</span>
+                            Inspection Reports
+                            <span class="today-badge ms-2" id="listDateLabel"><?php echo e(format_report_date($selected_date)); ?></span>
                         </h5>
-                        <span class="text-muted" style="font-size:0.85rem" id="recordCount">Showing 4 records</span>
+                        <span class="text-muted" style="font-size:0.85rem" id="recordCount">
+                            Showing <?php echo count($reports); ?> record<?php echo count($reports) === 1 ? '' : 's'; ?>
+                        </span>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
@@ -314,8 +638,55 @@
                                         <th>Action</th>
                                     </tr>
                                 </thead>
-                                <tbody id="inspectionListBody">
-                                    <!-- Rows filled by JS -->
+                                <tbody>
+
+                                    <?php if (empty($reports)): ?>
+
+                                        <tr>
+                                            <td colspan="9" class="text-center text-muted py-4">
+                                                No inspections found for selected filters.
+                                            </td>
+                                        </tr>
+
+                                    <?php else: ?>
+
+                                        <?php foreach ($reports as $index => $report): ?>
+
+                                            <?php
+                                            $auditor_name = !empty($report['auditor_full_name'])
+                                                ? $report['auditor_full_name']
+                                                : $report['auditor_user_name'];
+                                            $report_url = 'reports.php?' . http_build_query([
+                                                'date' => $selected_date,
+                                                'train_info_id' => $is_direct_train_search ? 'Detached' : ($selected_train ?: null),
+                                                'coach_id' => $selected_coach ?: null,
+                                                'report_id' => $report['report_id']
+                                            ]);
+                                            ?>
+
+                                            <tr>
+                                                <td><?php echo $index + 1; ?></td>
+                                                <td>
+                                                    <strong><?php echo e(display_value($report['train_no'])); ?></strong><br>
+                                                    <?php echo e(display_value($report['train_name'])); ?>
+                                                </td>
+                                                <td><?php echo e(display_value($report['coach_no'])); ?></td>
+                                                <td><?php echo e(display_value($auditor_name)); ?></td>
+                                                <td><?php echo e(format_report_date($report['inspection_date'])); ?></td>
+                                                <td><?php echo e(format_report_time($report['start_time'])); ?></td>
+                                                <td><?php echo e(format_report_time($report['end_time'])); ?></td>
+                                                <td><?php echo status_badge($report['report_status']); ?></td>
+                                                <td>
+                                                    <a class="btn btn-sm btn-primary" href="<?php echo e($report_url); ?>">
+                                                        <i class="bi bi-eye"></i> View Report
+                                                    </a>
+                                                </td>
+                                            </tr>
+
+                                        <?php endforeach; ?>
+
+                                    <?php endif; ?>
+
                                 </tbody>
                             </table>
                         </div>
@@ -324,7 +695,7 @@
             </div>
 
             <!-- ── DETAILED INSPECTION REPORT ── -->
-            <div id="reportSection">
+            <div id="reportSection" style="<?php echo $selected_report ? 'display:block;' : ''; ?>">
                 <div id="printSection" class="content-card">
                     <div class="card-body">
 
@@ -352,7 +723,9 @@
                                     </g>
                                 </svg> -->
                             </div>
-                            <div class="report-header-title">Indian Railways</div>
+                            <div class="report-header-title">
+                                <?php echo e($selected_report ? display_value($selected_report['zone_name']) : 'Railway Zone'); ?>
+                            </div>
                             <div style="font-size:1rem; font-weight:600; letter-spacing:0.5px; margin-top:2px;">Fire Detection &amp; Suppression System (FDSS)</div>
                             <div style="font-size:0.82rem; color:#555; margin-top:2px; letter-spacing:0.3px;">FDSS Equipment Inspection Report</div>
                         </div>
@@ -362,17 +735,38 @@
                             <table class="w-100">
                                 <tr>
                                     <td style="width:50%; border-right:1px solid #ccc;">
-                                        <strong>Train No :</strong> <span id="rpt-train">12423 - Rajdhani Exp</span><br>
-                                        <strong>Coach No :</strong> <span id="rpt-coach">NR-204112 / B1</span><br>
-                                        <strong>Railway Zone :</strong> <span id="rpt-zone">Northern Railway</span><br>
-                                        <strong>Station :</strong> <span id="rpt-station">NDLS - New Delhi Station</span>
+                                        <strong>Train No :</strong>
+                                        <?php echo e($selected_report ? display_value($selected_report['train_no'] . ' - ' . $selected_report['train_name']) : '-'); ?><br>
+                                        <strong>Coach No :</strong>
+                                        <?php echo e($selected_report ? display_value($selected_report['coach_no']) : '-'); ?><br>
+                                        <strong>Division :</strong>
+                                        <?php echo e($selected_report ? display_value($selected_report['division_name']) : '-'); ?><br>
+                                        <strong>Station :</strong>
+                                        <?php echo e($selected_report ? display_value($selected_report['station_name']) : '-'); ?>
                                     </td>
                                     <td>
-                                        <strong>Auditor Name :</strong> <span id="rpt-auditor">Ramesh Kumar (AUD-001)</span><br>
-                                        <strong>Date :</strong> <span id="rpt-date">09 May 2026</span><br>
-                                        <strong>Start Time :</strong> <span id="rpt-start">10:15 AM</span> &nbsp;
-                                        <strong>End Time :</strong> <span id="rpt-end">11:05 AM</span><br>
-                                        <strong>Status :</strong> <span id="rpt-status">Completed</span>
+                                        <?php
+                                        $selected_auditor_name = '';
+
+                                        if ($selected_report) {
+                                            $selected_auditor_name = !empty($selected_report['auditor_full_name'])
+                                                ? $selected_report['auditor_full_name']
+                                                : $selected_report['auditor_user_name'];
+                                        }
+
+                                        $selected_status = $selected_report['schedule_status'] ?? '-';
+                                        ?>
+
+                                        <strong>Auditor Name :</strong>
+                                        <?php echo e(display_value($selected_auditor_name)); ?><br>
+                                        <strong>Date :</strong>
+                                        <?php echo e($selected_report ? format_report_date($selected_report['created_at']) : '-'); ?><br>
+                                        <strong>Start Time :</strong>
+                                        <?php echo e($selected_report ? format_report_time($selected_report['created_at']) : '-'); ?> &nbsp;
+                                        <strong>End Time :</strong>
+                                        <?php echo e($selected_report ? format_report_time($selected_report['updated_at']) : '-'); ?><br>
+                                        <strong>Status :</strong>
+                                        <?php echo e($selected_status); ?>
                                     </td>
                                 </tr>
                             </table>
@@ -392,71 +786,42 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td class="text-center">1</td>
-                                        <td>
-                                            <strong>Hooter</strong>
-                                        </td>
-                                        <td id="s1" class="text-center">HT-2024-001</td>
-                                        <td class="text-center"><span id="c1" class="badge-ok">OK</span></td>
-                                        <td id="r1">Functioning properly, audible alarm tested.</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="text-center">2</td>
-                                        <td>
-                                            <strong>Flasher Light</strong>
-                                        </td>
-                                        <td id="s2" class="text-center">FL-2024-002</td>
-                                        <td class="text-center"><span id="c2" class="badge-ok">OK</span></td>
-                                        <td id="r2">Flashing correctly, no fault detected.</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="text-center">3</td>
-                                        <td>
-                                            <strong>Smoke Sensor (Genset Area)</strong>
-                                        </td>
-                                        <td id="s3" class="text-center">SS-GEN-003</td>
-                                        <td class="text-center"><span id="c3" class="badge-issue">Issue</span></td>
-                                        <td id="r3">Blinking red error light. Needs replacement.</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="text-center">4</td>
-                                        <td>
-                                            <strong>Smoke Sensor (Crew Area)</strong>
-                                        </td>
-                                        <td id="s4" class="text-center">SS-CRW-004</td>
-                                        <td class="text-center"><span id="c4" class="badge-ok">OK</span></td>
-                                        <td id="r4">Sensor responsive, self-test passed.</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="text-center">5</td>
-                                        <td>
-                                            <strong>Smoke Sensor (Guard Area)</strong>
-                                        </td>
-                                        <td id="s5" class="text-center">SS-GRD-005</td>
-                                        <td class="text-center"><span id="c5" class="badge-ok">OK</span></td>
-                                        <td id="r5">No fault, clean sensor head.</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="text-center">6</td>
-                                        <td>
-                                            <strong>Heat Sensor (Genset / Kitchen Area)</strong>
-                                        </td>
-                                        <td id="s6" class="text-center">HS-GEN-006</td>
-                                        <td class="text-center"><span id="c6" class="badge-ok">OK</span></td>
-                                        <td id="r6">Temperature threshold tested and verified.</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="text-center">7</td>
-                                        <td>
-                                            <strong>Heat Detection Test – LWLRRM</strong>
-                                        </td>
-                                        <td id="s7" class="text-center">HD-LWL-007</td>
-                                        <td class="text-center"><span id="c7" class="badge-na">N/A</span></td>
-                                        <td id="r7">Deferred to next service cycle.</td>
-                                    </tr>
+                                    <?php if (empty($selected_tools)): ?>
+
+                                        <tr>
+                                            <td colspan="5" class="text-center text-muted py-4">
+                                                Select a report to view inspection details.
+                                            </td>
+                                        </tr>
+
+                                    <?php else: ?>
+
+                                        <?php foreach ($selected_tools as $index => $tool): ?>
+
+                                            <?php $condition_class = condition_badge_class($tool['Conditions']); ?>
+
+                                            <tr>
+                                                <td class="text-center"><?php echo $index + 1; ?></td>
+                                                <td><strong><?php echo e(display_value($tool['tool_name'])); ?></strong></td>
+                                                <td class="text-center"><?php echo e(display_value($tool['serial_number'])); ?></td>
+                                                <td class="text-center">
+                                                    <span class="<?php echo e($condition_class); ?>">
+                                                        <?php echo e(display_value($tool['Conditions'])); ?>
+                                                    </span>
+                                                </td>
+                                                <td><?php echo e(display_value($tool['remarks'])); ?></td>
+                                            </tr>
+
+                                        <?php endforeach; ?>
+
+                                    <?php endif; ?>
                                 </tbody>
                             </table>
+                        </div>
+
+                        <div class="section-title">Special Remarks</div>
+                        <div style="border:1px solid #ccc; padding:10px; min-height:52px; font-size:0.88rem;">
+                            <?php echo e($selected_report ? display_value($selected_report['special_remarks']) : '-'); ?>
                         </div>
 
                         <!-- Verification / Signature -->
@@ -483,9 +848,14 @@
 
                 <!-- Report Actions -->
                 <div class="d-flex justify-content-end gap-2 mt-3 no-print">
-                    <button class="btn btn-outline-secondary" onclick="goBack()">
+                    <a class="btn btn-outline-secondary"
+                       href="reports.php?<?php echo e(http_build_query([
+                           'date' => $selected_date,
+                           'train_info_id' => $is_direct_train_search ? 'Detached' : ($selected_train ?: null),
+                           'coach_id' => $selected_coach ?: null
+                       ])); ?>">
                         <i class="bi bi-arrow-left"></i> Back
-                    </button>
+                    </a>
                     <button class="btn btn-dark" onclick="window.print()">
                         <i class="bi bi-printer"></i> Print Report
                     </button>
@@ -506,219 +876,5 @@
     <!-- Layout JS -->
     <script src="assets/js/layout.js"></script>
 
-    <script>
-        /* ──────────────────────────────────────────
-           Sample inspection data (today = 09 May 2026)
-        ────────────────────────────────────────── */
-        const today = '2026-05-09';
-        const allInspections = [
-            {
-                id: 1, train: '12423 - Rajdhani Exp', coach: 'NR-204112 / B1',
-                auditor: 'Ramesh Kumar (AUD-001)', date: '2026-05-09',
-                start: '10:15 AM', end: '11:05 AM', status: 'Completed',
-                zone: 'Northern Railway', station: 'NDLS - New Delhi Station',
-                remarks: 'Inspection completed. Smoke Sensor (Genset Area) requires replacement before next run. All other FDSS components are operational.',
-                tools: [
-                    { s:'HT-2024-001', c:'OK',    r:'Functioning properly, audible alarm tested.', photo:true },
-                    { s:'FL-2024-002', c:'OK',    r:'Flashing correctly, no fault detected.',       photo:true },
-                    { s:'SS-GEN-003', c:'Issue',  r:'Blinking red error light. Needs replacement.', photo:true },
-                    { s:'SS-CRW-004', c:'OK',    r:'Sensor responsive, self-test passed.',          photo:true },
-                    { s:'SS-GRD-005', c:'OK',    r:'No fault, clean sensor head.',                  photo:true },
-                    { s:'HS-GEN-006', c:'OK',    r:'Temperature threshold tested and verified.',    photo:true },
-                    { s:'HD-LWL-007', c:'N/A',   r:'Deferred to next service cycle.',              photo:false }
-                ]
-            },
-            {
-                id: 2, train: '12951 - Mumbai Rajdhani', coach: 'NR-193452 / A1',
-                auditor: 'Sunil Verma (AUD-002)', date: '2026-05-09',
-                start: '09:00 AM', end: '09:50 AM', status: 'Completed',
-                zone: 'Western Railway', station: 'MMCT - Mumbai Central',
-                remarks: 'All FDSS components functional. No issues found.',
-                tools: [
-                    { s:'HT-2024-011', c:'OK',   r:'Alarm tested OK.',                             photo:true },
-                    { s:'FL-2024-012', c:'OK',   r:'Flasher operational.',                          photo:true },
-                    { s:'SS-GEN-013', c:'OK',    r:'No smoke detected, sensor clean.',              photo:true },
-                    { s:'SS-CRW-014', c:'OK',    r:'Self-test passed.',                             photo:true },
-                    { s:'SS-GRD-015', c:'OK',    r:'Clear, no fault.',                              photo:true },
-                    { s:'HS-GEN-016', c:'OK',    r:'Heat sensor within limits.',                    photo:true },
-                    { s:'HD-LWL-017', c:'OK',    r:'Engine shutdown test verified.',               photo:true }
-                ]
-            },
-            {
-                id: 3, train: '12301 - Howrah Rajdhani', coach: 'NR-182341 / S1',
-                auditor: 'Priya Sharma (AUD-003)', date: '2026-05-09',
-                start: '11:30 AM', end: null, status: 'In Progress',
-                zone: 'Eastern Railway', station: 'HWH - Howrah Junction',
-                remarks: '',
-                tools: [
-                    { s:'HT-2024-021', c:'OK',   r:'Alarm tested.',                                photo:true },
-                    { s:'FL-2024-022', c:'Issue', r:'Dim flicker, bulb may need replacement.',    photo:true },
-                    { s:'SS-GEN-023', c:'OK',    r:'Functioning normally.',                        photo:false},
-                    { s:'SS-CRW-024', c:'OK',    r:'OK',                                           photo:false},
-                    { s:'SS-GRD-025', c:'OK',    r:'OK',                                           photo:false},
-                    { s:'HS-GEN-026', c:'N/A',   r:'Pending check.',                              photo:false},
-                    { s:'HD-LWL-027', c:'N/A',   r:'Pending check.',                              photo:false}
-                ]
-            },
-            {
-                id: 4, train: '12002 - Bhopal Shatabdi', coach: 'NR-271823 / S3',
-                auditor: 'Anil Tiwari (AUD-004)', date: '2026-05-09',
-                start: '08:00 AM', end: null, status: 'Pending',
-                zone: 'North Central Railway', station: 'AGC - Agra Cantt',
-                remarks: '',
-                tools: [
-                    { s:'HT-2024-031', c:'N/A', r:'-', photo:false},
-                    { s:'FL-2024-032', c:'N/A', r:'-', photo:false},
-                    { s:'SS-GEN-033', c:'N/A', r:'-', photo:false},
-                    { s:'SS-CRW-034', c:'N/A', r:'-', photo:false},
-                    { s:'SS-GRD-035', c:'N/A', r:'-', photo:false},
-                    { s:'HS-GEN-036', c:'N/A', r:'-', photo:false},
-                    { s:'HD-LWL-037', c:'N/A', r:'-', photo:false}
-                ]
-            },
-            /* ── previous day record ── */
-            {
-                id: 5, train: '22691 - Rajdhani Express', coach: 'NR-301456 / H1',
-                auditor: 'Deepak Nair (AUD-005)', date: '2026-05-08',
-                start: '14:00 PM', end: '14:55 PM', status: 'Completed',
-                zone: 'South Western Railway', station: 'SBC - KSR Bengaluru',
-                remarks: 'All systems cleared.',
-                tools: [
-                    { s:'HT-2023-041', c:'OK',   r:'OK',                                           photo:true },
-                    { s:'FL-2023-042', c:'OK',   r:'OK',                                           photo:true },
-                    { s:'SS-GEN-043', c:'OK',    r:'OK',                                           photo:true },
-                    { s:'SS-CRW-044', c:'OK',    r:'OK',                                           photo:true },
-                    { s:'SS-GRD-045', c:'OK',    r:'OK',                                           photo:true },
-                    { s:'HS-GEN-046', c:'Issue', r:'Calibration drift detected, flagged.',         photo:true },
-                    { s:'HD-LWL-047', c:'OK',    r:'Engine shutdown verified.',                    photo:true }
-                ]
-            }
-        ];
-
-        /* ──────────────────────────────────────────
-           Init: set today's date in filter
-        ────────────────────────────────────────── */
-        document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('filterDate').value = today;
-            document.getElementById('btnToday').addEventListener('click', () => {
-                document.getElementById('filterDate').value = today;
-                searchReport();
-            });
-            renderList(today, '', '');
-        });
-
-        /* ──────────────────────────────────────────
-           Format date nicely: "09 May 2026"
-        ────────────────────────────────────────── */
-        function fmtDate(d) {
-            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            const [y,m,day] = d.split('-');
-            return `${day} ${months[+m-1]} ${y}`;
-        }
-
-        /* ──────────────────────────────────────────
-           Status badge HTML
-        ────────────────────────────────────────── */
-        function statusBadge(s) {
-            if (s === 'Completed')  return `<span class="status-completed">${s}</span>`;
-            if (s === 'In Progress') return `<span class="status-inprogress">${s}</span>`;
-            return `<span class="status-pending">${s}</span>`;
-        }
-
-        /* ──────────────────────────────────────────
-           Render the list view
-        ────────────────────────────────────────── */
-        function renderList(date, train, coach) {
-            let filtered = allInspections.filter(r => r.date === date);
-            if (train)  filtered = filtered.filter(r => r.train === train);
-            if (coach)  filtered = filtered.filter(r => r.coach === coach);
-
-            document.getElementById('listDateLabel').textContent = fmtDate(date);
-            document.getElementById('recordCount').textContent = `Showing ${filtered.length} record${filtered.length !== 1 ? 's' : ''}`;
-
-            const tbody = document.getElementById('inspectionListBody');
-            if (filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">No inspections found for selected filters.</td></tr>`;
-                return;
-            }
-            tbody.innerHTML = filtered.map((r, i) => `
-                <tr>
-                    <td>${i + 1}</td>
-                    <td><strong>${r.train}</strong></td>
-                    <td>${r.coach}</td>
-                    <td>${r.auditor}</td>
-                    <td>${fmtDate(r.date)}</td>
-                    <td>${r.start}</td>
-                    <td>${r.end ?? '—'}</td>
-                    <td>${statusBadge(r.status)}</td>
-                    <td>
-                        <button class="btn btn-sm btn-primary" onclick="viewReport(${r.id})">
-                            <i class="bi bi-eye"></i> View Report
-                        </button>
-                    </td>
-                </tr>`).join('');
-        }
-
-        /* ──────────────────────────────────────────
-           Search button handler
-        ────────────────────────────────────────── */
-        function searchReport() {
-            const date  = document.getElementById('filterDate').value || today;
-            const train = document.getElementById('filterTrain').value;
-            const coach = document.getElementById('filterCoach').value;
-
-            // If specific coach chosen → show report directly
-            if (coach) {
-                const match = allInspections.find(r => r.date === date && r.coach === coach && (!train || r.train === train));
-                if (match) { viewReport(match.id); return; }
-            }
-
-            // Otherwise show list
-            document.getElementById('reportSection').style.display = 'none';
-            document.getElementById('listSection').style.display   = 'block';
-            renderList(date, train, coach);
-        }
-
-        /* ──────────────────────────────────────────
-           View a detailed report by id
-        ────────────────────────────────────────── */
-        function viewReport(id) {
-            const r = allInspections.find(x => x.id === id);
-            if (!r) return;
-
-            // Fill header info
-            document.getElementById('rpt-train').textContent   = r.train;
-            document.getElementById('rpt-coach').textContent   = r.coach;
-            document.getElementById('rpt-zone').textContent    = r.zone;
-            document.getElementById('rpt-station').textContent = r.station;
-            document.getElementById('rpt-auditor').textContent = r.auditor;
-            document.getElementById('rpt-date').textContent    = fmtDate(r.date);
-            document.getElementById('rpt-start').textContent   = r.start;
-            document.getElementById('rpt-end').textContent     = r.end ?? '—';
-            document.getElementById('rpt-status').textContent  = r.status;
-
-            // Fill tool rows
-            r.tools.forEach((t, i) => {
-                const n = i + 1;
-                document.getElementById(`s${n}`).textContent = t.s;
-                document.getElementById(`r${n}`).textContent = t.r;
-                const cEl = document.getElementById(`c${n}`);
-                cEl.textContent  = t.c;
-                cEl.className    = t.c === 'OK' ? 'badge-ok' : t.c === 'Issue' ? 'badge-issue' : 'badge-na';
-            });
-
-            // Show/hide sections
-            document.getElementById('listSection').style.display   = 'none';
-            document.getElementById('reportSection').style.display = 'block';
-        }
-
-        /* ──────────────────────────────────────────
-           Back button
-        ────────────────────────────────────────── */
-        function goBack() {
-            document.getElementById('reportSection').style.display = 'none';
-            document.getElementById('listSection').style.display   = 'block';
-        }
-    </script>
 </body>
 </html>
