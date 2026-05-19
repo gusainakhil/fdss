@@ -33,11 +33,45 @@ $total_inventory_used = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_coa
 $fdss_coaches = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_train_coach WHERE user_id = ? AND coach_type LIKE '%FDSS%'", "i", $user_id);
 $FSDS_coaches = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_train_coach WHERE user_id = ? AND coach_type LIKE '%FSDS%'", "i", $user_id);
 
+$fdss_inventory_used = get_count($conn, "
+    SELECT COUNT(*) AS total
+    FROM fdss_coach_inventory ci
+    INNER JOIN fdss_train_coach c ON c.coach_id = ci.coach_id
+    WHERE ci.user_id = ? AND c.coach_type LIKE '%FDSS%'
+", "i", $user_id);
+
+$FSDS_inventory_used = get_count($conn, "
+    SELECT COUNT(*) AS total
+    FROM fdss_coach_inventory ci
+    INNER JOIN fdss_train_coach c ON c.coach_id = ci.coach_id
+    WHERE ci.user_id = ? AND c.coach_type LIKE '%FSDS%'
+", "i", $user_id);
+
 $total_oem_makes = get_count($conn, "
     SELECT COUNT(DISTINCT iu.manufacturer_id) AS total
     FROM fdss_coach_inventory ci
     INNER JOIN fdds_inventory_unit iu ON iu.unit_id = ci.inventory_unit_id
     WHERE ci.user_id = ? AND iu.manufacturer_id IS NOT NULL
+", "i", $user_id);
+
+$fdss_oem_makes = get_count($conn, "
+    SELECT COUNT(DISTINCT iu.manufacturer_id) AS total
+    FROM fdss_coach_inventory ci
+    INNER JOIN fdss_train_coach c ON c.coach_id = ci.coach_id
+    INNER JOIN fdds_inventory_unit iu ON iu.unit_id = ci.inventory_unit_id
+    WHERE ci.user_id = ?
+    AND c.coach_type LIKE '%FDSS%'
+    AND iu.manufacturer_id IS NOT NULL
+", "i", $user_id);
+
+$FSDS_oem_makes = get_count($conn, "
+    SELECT COUNT(DISTINCT iu.manufacturer_id) AS total
+    FROM fdss_coach_inventory ci
+    INNER JOIN fdss_train_coach c ON c.coach_id = ci.coach_id
+    INNER JOIN fdds_inventory_unit iu ON iu.unit_id = ci.inventory_unit_id
+    WHERE ci.user_id = ?
+    AND c.coach_type LIKE '%FSDS%'
+    AND iu.manufacturer_id IS NOT NULL
 ", "i", $user_id);
 
 $fdss_under_warranty = get_count($conn, "
@@ -63,6 +97,17 @@ $FSDS_out_warranty = get_count($conn, "
     INNER JOIN fdds_inventory_unit iu ON iu.unit_id = ci.inventory_unit_id
     WHERE ci.user_id = ? AND c.coach_type LIKE '%FSDS%' AND iu.Warranty_expire IS NOT NULL AND DATE(iu.Warranty_expire) < CURDATE()
 ", "i", $user_id);
+
+$fdss_out_warranty = get_count($conn, "
+    SELECT COUNT(*) AS total
+    FROM fdss_coach_inventory ci
+    INNER JOIN fdss_train_coach c ON c.coach_id = ci.coach_id
+    INNER JOIN fdds_inventory_unit iu ON iu.unit_id = ci.inventory_unit_id
+    WHERE ci.user_id = ? AND c.coach_type LIKE '%FDSS%' AND iu.Warranty_expire IS NOT NULL AND DATE(iu.Warranty_expire) < CURDATE()
+", "i", $user_id);
+
+$total_under_warranty = $fdss_under_warranty + $FSDS_under_warranty;
+$total_out_warranty = $fdss_out_warranty + $FSDS_out_warranty;
 
 $expired_inventory = get_count($conn, "
     SELECT COUNT(*) AS total
@@ -174,26 +219,81 @@ if ($oem_stmt) {
     $oem_stmt->close();
 }
 
-/* Static counts: database columns not created yet */
-$detached_total = 0;
-$detached_fdss = 0;
-$detached_fsds = 0;
+$detached_total = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_train_coach WHERE user_id = ? AND train_info_id IS NULL", "i", $user_id);
+$detached_fdss = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_train_coach WHERE user_id = ? AND train_info_id IS NULL AND coach_type LIKE '%FDSS%'", "i", $user_id);
+$detached_fsds = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_train_coach WHERE user_id = ? AND train_info_id IS NULL AND coach_type LIKE '%FSDS%'", "i", $user_id);
 
-$intact_total = 0;
-$intact_fdss = 0;
-$intact_fsds = 0;
+$intact_total = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_train_coach WHERE user_id = ? AND train_info_id IS NOT NULL", "i", $user_id);
+$intact_fdss = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_train_coach WHERE user_id = ? AND train_info_id IS NOT NULL AND coach_type LIKE '%FDSS%'", "i", $user_id);
+$intact_fsds = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_train_coach WHERE user_id = ? AND train_info_id IS NOT NULL AND coach_type LIKE '%FSDS%'", "i", $user_id);
 
-$ok_total = 0;
-$ok_fdss = 0;
-$ok_fsds = 0;
+$ok_total = get_count($conn, "
+    SELECT COUNT(*) AS total
+    FROM fdds_coach_inspection
+    WHERE user_id = ? AND LOWER(Conditions) IN ('ok', 'good', 'working', 'active')
+", "i", $user_id);
+$ok_fdss = get_count($conn, "
+    SELECT COUNT(*) AS total
+    FROM fdds_coach_inspection i
+    INNER JOIN fdss_train_coach c ON c.coach_id = i.coach_id
+    WHERE i.user_id = ? AND LOWER(i.Conditions) IN ('ok', 'good', 'working', 'active') AND c.coach_type LIKE '%FDSS%'
+", "i", $user_id);
+$ok_fsds = get_count($conn, "
+    SELECT COUNT(*) AS total
+    FROM fdds_coach_inspection i
+    INNER JOIN fdss_train_coach c ON c.coach_id = i.coach_id
+    WHERE i.user_id = ? AND LOWER(i.Conditions) IN ('ok', 'good', 'working', 'active') AND c.coach_type LIKE '%FSDS%'
+", "i", $user_id);
 
-$broken_total = 0;
-$broken_fdss = 0;
-$broken_fsds = 0;
+$broken_total = get_count($conn, "
+    SELECT COUNT(*) AS total
+    FROM fdds_coach_inspection
+    WHERE user_id = ? AND LOWER(Conditions) IN ('issue', 'faulty', 'bad', 'not working', 'failed')
+", "i", $user_id);
+$broken_fdss = get_count($conn, "
+    SELECT COUNT(*) AS total
+    FROM fdds_coach_inspection i
+    INNER JOIN fdss_train_coach c ON c.coach_id = i.coach_id
+    WHERE i.user_id = ? AND LOWER(i.Conditions) IN ('issue', 'faulty', 'bad', 'not working', 'failed') AND c.coach_type LIKE '%FDSS%'
+", "i", $user_id);
+$broken_fsds = get_count($conn, "
+    SELECT COUNT(*) AS total
+    FROM fdds_coach_inspection i
+    INNER JOIN fdss_train_coach c ON c.coach_id = i.coach_id
+    WHERE i.user_id = ? AND LOWER(i.Conditions) IN ('issue', 'faulty', 'bad', 'not working', 'failed') AND c.coach_type LIKE '%FSDS%'
+", "i", $user_id);
 
-$warranty_claim_total = 0;
-$warranty_claim_fdss = 0;
-$warranty_claim_fsds = 0;
+$warranty_claim_total = get_count($conn, "
+    SELECT COUNT(*) AS total
+    FROM fdds_coach_inspection i
+    INNER JOIN fdds_inventory_unit iu ON iu.unit_id = i.unit_id
+    WHERE i.user_id = ?
+    AND LOWER(i.Conditions) IN ('issue', 'faulty', 'bad', 'not working', 'failed')
+    AND iu.Warranty_expire IS NOT NULL
+    AND DATE(iu.Warranty_expire) >= CURDATE()
+", "i", $user_id);
+$warranty_claim_fdss = get_count($conn, "
+    SELECT COUNT(*) AS total
+    FROM fdds_coach_inspection i
+    INNER JOIN fdss_train_coach c ON c.coach_id = i.coach_id
+    INNER JOIN fdds_inventory_unit iu ON iu.unit_id = i.unit_id
+    WHERE i.user_id = ?
+    AND LOWER(i.Conditions) IN ('issue', 'faulty', 'bad', 'not working', 'failed')
+    AND iu.Warranty_expire IS NOT NULL
+    AND DATE(iu.Warranty_expire) >= CURDATE()
+    AND c.coach_type LIKE '%FDSS%'
+", "i", $user_id);
+$warranty_claim_fsds = get_count($conn, "
+    SELECT COUNT(*) AS total
+    FROM fdds_coach_inspection i
+    INNER JOIN fdss_train_coach c ON c.coach_id = i.coach_id
+    INNER JOIN fdds_inventory_unit iu ON iu.unit_id = i.unit_id
+    WHERE i.user_id = ?
+    AND LOWER(i.Conditions) IN ('issue', 'faulty', 'bad', 'not working', 'failed')
+    AND iu.Warranty_expire IS NOT NULL
+    AND DATE(iu.Warranty_expire) >= CURDATE()
+    AND c.coach_type LIKE '%FSDS%'
+", "i", $user_id);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -360,7 +460,7 @@ $warranty_claim_fsds = 0;
             <div class="dash-info">
                 <h6>Total Components Used</h6>
                 <h3><?php echo number_format($total_inventory_used); ?></h3>
-                <p>FDSS:  0 | FSDS: 0</p>
+                <p>FDSS: <?php echo number_format($fdss_inventory_used); ?> | FSDS: <?php echo number_format($FSDS_inventory_used); ?></p>
             </div>
         </div>
          <div class="dash-box">
@@ -386,7 +486,7 @@ $warranty_claim_fsds = 0;
             <div class="dash-info">
                 <h6>Total OEM Makes</h6>
                 <h3><?php echo number_format($total_oem_makes); ?></h3>
-                 <p>FDSS:  0 | FSDS: 0</p>
+                 <p>FDSS: <?php echo number_format($fdss_oem_makes); ?> | FSDS: <?php echo number_format($FSDS_oem_makes); ?></p>
             </div>
         </div>
           <div class="dash-box success">
@@ -420,26 +520,16 @@ $warranty_claim_fsds = 0;
             <div class="dash-icon"><i class="bi bi-shield-check"></i></div>
             <div class="dash-info">
                 <h6> Under Warranty</h6>
-                <h3><?php echo number_format($fdss_under_warranty); ?></h3>
+                <h3><?php echo number_format($total_under_warranty); ?></h3>
                 <p>FDSS: <?php echo number_format($fdss_under_warranty); ?>   | FSDS: <?php echo number_format($FSDS_under_warranty); ?></p>
             </div>
         </div>
-<!-- 
-        <div class="dash-box success">
-            <div class="dash-icon"><i class="bi bi-shield-plus"></i></div>
-            <div class="dash-info">
-                <h6>Components Under Warranty</h6>
-                <h3><?php echo number_format($FSDS_under_warranty); ?></h3>
-                <p>FDSS:  0 | FSDS: 0</p>
-            </div>
-        </div> -->
-
         <div class="dash-box danger">
             <div class="dash-icon"><i class="bi bi-exclamation-triangle"></i></div>
             <div class="dash-info">
                 <h6>Out Of Warranty</h6>
-                <h3><?php echo number_format($FSDS_out_warranty); ?></h3>
-                <p>FDSS:  0 | FSDS: 0</p>
+                <h3><?php echo number_format($total_out_warranty); ?></h3>
+                <p>FDSS: <?php echo number_format($fdss_out_warranty); ?> | FSDS: <?php echo number_format($FSDS_out_warranty); ?></p>
             </div>
         </div>
 
@@ -457,7 +547,7 @@ $warranty_claim_fsds = 0;
             <div class="dash-info">
                 <h6>Components Count Type</h6>
                 <h3><?php echo number_format($active_inventory); ?></h3>
-                <p>FDSS:  0 | FSDS: 0</p>
+                <p>FDSS: <?php echo number_format($fdss_inventory_used); ?> | FSDS: <?php echo number_format($FSDS_inventory_used); ?></p>
             </div>
         </div>
 
@@ -562,7 +652,7 @@ $warranty_claim_fsds = 0;
 
                     <div class="quick-box">
                         <h6><i class="bi bi-exclamation-triangle"></i> Out of Warranty</h6>
-                        <p><?php echo number_format($FSDS_out_warranty); ?> FSDS items are out of warranty.</p>
+                        <p>FDSS: <?php echo number_format($fdss_out_warranty); ?> | FSDS: <?php echo number_format($FSDS_out_warranty); ?></p>
                     </div>
                 </div>
             </div>
@@ -603,12 +693,12 @@ new Chart(document.getElementById('dailyReportChart'), {
 new Chart(document.getElementById('trainStatusChart'), {
     type: 'doughnut',
     data: {
-        labels: ['Active Inventory', 'Expired Inventory', 'FSDS Out Warranty'],
+        labels: ['Active Inventory', 'Expired Inventory', 'Out Warranty'],
         datasets: [{
             data: [
                 <?php echo (int)$active_inventory; ?>,
                 <?php echo (int)$expired_inventory; ?>,
-                <?php echo (int)$FSDS_out_warranty; ?>
+                <?php echo (int)$total_out_warranty; ?>
             ],
             backgroundColor: ['#3c8dbc', '#dc3545', '#ffc107']
         }]
