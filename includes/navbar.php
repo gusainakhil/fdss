@@ -1,10 +1,11 @@
+<?php $base_path = $base_path ?? ''; ?>
 <nav class="navbar navbar-expand-lg navbar-custom">
     <div class="container-fluid">
         <button type="button" class="toggle-sidebar-btn" id="sidebarToggle">
             <i class="bi bi-list"></i>
         </button>
 
-        <a class="navbar-brand" href="index.php">
+        <a class="navbar-brand" href="<?php echo $base_path; ?>index.php">
             <i class="bi bi-train-front-fill"></i>
             <span>FDSS - Indian Railways</span>
         </a>
@@ -21,7 +22,7 @@
             </li>
 
             <li class="nav-item">
-                <a class="nav-link text-danger fw-semibold" href="logout.php">
+                <a class="nav-link text-danger fw-semibold" href="<?php echo $base_path; ?>logout.php">
                     <i class="bi bi-box-arrow-right"></i> Logout
                 </a>
             </li>

@@ -1,17 +1,46 @@
 <?php
-session_start();
+require_once __DIR__ . '/_auth.php';
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: ../login.php');
-    exit;
+$active_page = 'reports';
+
+$report_cards = [
+    [
+        'title' => 'Users by Role',
+        'icon' => 'bi-people',
+        'rows' => []
+    ],
+    [
+        'title' => 'Schedules by Status',
+        'icon' => 'bi-calendar-check',
+        'rows' => []
+    ],
+    [
+        'title' => 'Coaches by Type',
+        'icon' => 'bi-box-seam',
+        'rows' => []
+    ],
+    [
+        'title' => 'Inspections by Condition',
+        'icon' => 'bi-clipboard2-check',
+        'rows' => []
+    ],
+];
+
+$queries = [
+    0 => "SELECT role AS label, COUNT(*) AS total FROM fdss_users GROUP BY role ORDER BY total DESC",
+    1 => "SELECT status AS label, COUNT(*) AS total FROM fdss_coach_schedule GROUP BY status ORDER BY total DESC",
+    2 => "SELECT COALESCE(coach_type, 'Unknown') AS label, COUNT(*) AS total FROM fdss_train_coach GROUP BY coach_type ORDER BY total DESC",
+    3 => "SELECT COALESCE(Conditions, 'Unknown') AS label, COUNT(*) AS total FROM fdds_coach_inspection GROUP BY Conditions ORDER BY total DESC",
+];
+
+foreach ($queries as $index => $sql) {
+    $result = $conn->query($sql);
+    if ($result) {
+        while ($row = $result->fetch_assoc()) {
+            $report_cards[$index]['rows'][] = $row;
+        }
+    }
 }
-
-if ($_SESSION['role'] !== 'SUPER_ADMIN' && $_SESSION['role'] !== 'ADMIN') {
-    header('Location: ../login.php');
-    exit;
-}
-
-require_once '../config/db.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -22,99 +51,51 @@ require_once '../config/db.php';
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.0/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="../assets/css/styles.css" rel="stylesheet">
+    <?php include __DIR__ . '/_styles.php'; ?>
 </head>
 <body>
-<?php include('navbar.php'); ?>
+<?php include __DIR__ . '/navbar.php'; ?>
 
-<div class="sidebar-container">
-    <div class="admin-sidebar">
-        <div class="sidebar-header">
-            <h5><i class="bi bi-shield-lock"></i> Admin Panel</h5>
-        </div>
-        <nav class="sidebar-nav">
-            <a href="index.php" class="nav-link">
-                <i class="bi bi-speedometer2"></i> Dashboard
-            </a>
-            <a href="users.php" class="nav-link">
-                <i class="bi bi-people"></i> User Management
-            </a>
-            <a href="systems.php" class="nav-link">
-                <i class="bi bi-gear"></i> System Settings
-            </a>
-            <a href="reports.php" class="nav-link active">
-                <i class="bi bi-file-earmark-text"></i> Reports
-            </a>
-            <hr>
-            <a href="logout.php" class="nav-link text-danger">
-                <i class="bi bi-box-arrow-right"></i> Logout
-            </a>
-        </nav>
-    </div>
+<div class="admin-shell">
+    <?php include __DIR__ . '/_sidebar.php'; ?>
 
-    <main class="main-content">
+    <main class="admin-main">
         <div class="page-header">
             <div>
                 <h1>System Reports</h1>
-                <p class="page-header-subtitle">View and generate system reports</p>
+                <p class="page-header-subtitle">Quick administrative summaries from live data</p>
             </div>
         </div>
 
-        <div class="row">
-            <div class="col-md-6 mb-3">
-                <div class="content-card">
-                    <div class="card-header">
-                        <h5>User Activity Report</h5>
-                    </div>
-                    <div class="card-body">
-                        <p class="text-muted">Generate reports on user login activities and system usage.</p>
-                        <button class="btn btn-outline-primary">
-                            <i class="bi bi-download"></i> Generate Report
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-6 mb-3">
-                <div class="content-card">
-                    <div class="card-header">
-                        <h5>Inspection Reports</h5>
-                    </div>
-                    <div class="card-body">
-                        <p class="text-muted">View all inspection reports and audit logs.</p>
-                        <button class="btn btn-outline-primary">
-                            <i class="bi bi-download"></i> Generate Report
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-6 mb-3">
-                <div class="content-card">
-                    <div class="card-header">
-                        <h5>Train & Coach Report</h5>
-                    </div>
-                    <div class="card-body">
-                        <p class="text-muted">Generate reports on registered trains and coaches.</p>
-                        <button class="btn btn-outline-primary">
-                            <i class="bi bi-download"></i> Generate Report
-                        </button>
+        <div class="row g-3">
+            <?php foreach ($report_cards as $card): ?>
+                <div class="col-lg-6">
+                    <div class="content-card h-100">
+                        <div class="card-header">
+                            <h5><i class="bi <?php echo e($card['icon']); ?>"></i> <?php echo e($card['title']); ?></h5>
+                        </div>
+                        <div class="card-body p-0">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                <tr><th>Name</th><th class="text-end">Total</th></tr>
+                                </thead>
+                                <tbody>
+                                <?php if (empty($card['rows'])): ?>
+                                    <tr><td colspan="2" class="text-center text-muted py-4">No data found.</td></tr>
+                                <?php else: ?>
+                                    <?php foreach ($card['rows'] as $row): ?>
+                                        <tr>
+                                            <td><?php echo e($row['label']); ?></td>
+                                            <td class="text-end"><strong><?php echo number_format((int) $row['total']); ?></strong></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
-            </div>
-
-            <div class="col-md-6 mb-3">
-                <div class="content-card">
-                    <div class="card-header">
-                        <h5>Inventory Report</h5>
-                    </div>
-                    <div class="card-body">
-                        <p class="text-muted">View inventory status and equipment logs.</p>
-                        <button class="btn btn-outline-primary">
-                            <i class="bi bi-download"></i> Generate Report
-                        </button>
-                    </div>
-                </div>
-            </div>
+            <?php endforeach; ?>
         </div>
     </main>
 </div>
