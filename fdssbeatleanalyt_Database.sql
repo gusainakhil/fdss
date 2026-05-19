@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: May 19, 2026 at 03:32 PM
+-- Generation Time: May 19, 2026 at 04:57 PM
 -- Server version: 10.11.17-MariaDB
 -- PHP Version: 8.4.21
 
@@ -36,6 +36,7 @@ CREATE TABLE `fdds_coach_inspection` (
   `user_id` int(11) NOT NULL,
   `inventory_id` int(11) NOT NULL,
   `tool_name` varchar(255) NOT NULL,
+  `Serial_No` varchar(11) NOT NULL,
   `Conditions` varchar(255) NOT NULL,
   `unit_id` int(11) NOT NULL,
   `status` enum('Pending','In Progress','Completed') DEFAULT 'Pending',
@@ -43,6 +44,19 @@ CREATE TABLE `fdds_coach_inspection` (
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+
+--
+-- Dumping data for table `fdds_coach_inspection`
+--
+
+INSERT INTO `fdds_coach_inspection` (`inspection_id`, `schedule_id`, `train_info_id`, `coach_id`, `auditor_id`, `user_id`, `inventory_id`, `tool_name`, `Serial_No`, `Conditions`, `unit_id`, `status`, `remarks`, `created_at`, `updated_at`) VALUES
+(1, 6, 7, 3, 6, 2, 1, 'hooter', 'YHG562Y', 'ok', 8, 'Completed', 'good', '2026-05-19 10:34:50', '2026-05-19 10:44:55'),
+(2, 6, 7, 3, 6, 2, 1, 'hooter', 'YHG562YH', 'ok', 8, 'Pending', 'good', '2026-05-19 10:34:50', '2026-05-19 10:44:58'),
+(3, 6, 7, 3, 6, 2, 1, 'hooter', 'YHG562YH', 'ok', 8, 'Pending', 'good', '2026-05-19 10:34:50', '2026-05-19 10:45:01'),
+(4, 6, 7, 3, 6, 2, 1, 'hooter', 'YHG562YH', 'ok', 8, 'Pending', 'good', '2026-05-19 10:34:50', '2026-05-19 10:45:03'),
+(5, 6, 7, 3, 6, 2, 1, 'hooter', 'YHG562YH', 'ok', 8, 'Pending', 'good', '2026-05-19 10:34:50', '2026-05-19 10:45:05'),
+(6, 6, 7, 3, 6, 2, 1, 'hooter', '0', 'ok', 8, 'Pending', 'good', '2026-05-19 10:34:50', '2026-05-19 10:34:50'),
+(7, 6, 7, 3, 6, 2, 1, 'hooter', '0', 'ok', 8, 'Pending', 'good', '2026-05-19 10:34:50', '2026-05-19 10:34:50');
 
 -- --------------------------------------------------------
 
@@ -74,7 +88,7 @@ INSERT INTO `fdds_inventory_unit` (`unit_id`, `inventory_id`, `user_id`, `serial
 (5, 6, 2, '12424', '2444', '2026-05-13', NULL, 3, 'na', '2026-05-15 16:21:08', '2026-05-15 16:21:08'),
 (6, 7, 2, '1234', '232', '2026-05-20', NULL, 5, 'f', '2026-05-15 16:40:54', '2026-05-15 16:40:54'),
 (7, 7, 2, '5432', '4543', '2026-05-12', NULL, 5, 'f', '2026-05-15 16:40:54', '2026-05-15 16:40:54'),
-(8, 7, 2, '12', '13321', '2026-05-06', '2026-05-07 00:00:00', 4, 'g', '2026-05-15 16:41:16', '2026-05-18 10:59:25'),
+(8, 7, 2, 'Y67JKGH87', '13321', '2026-05-06', '2026-05-07 00:00:00', 4, 'g', '2026-05-15 16:41:16', '2026-05-19 10:39:52'),
 (9, 7, 2, '22', '1234', '2026-05-14', '2026-05-27 00:00:00', 1, 'g', '2026-05-15 16:41:16', '2026-05-18 11:05:29'),
 (10, 7, 2, 'qwef', 'ert', '2026-04-29', '2026-05-22 00:00:00', 5, 'f', '2026-05-15 16:41:55', '2026-05-18 11:05:41'),
 (11, 7, 2, 'we', 'etewrt', '2026-05-06', NULL, 5, 'f', '2026-05-15 16:41:55', '2026-05-15 16:41:55'),
@@ -137,7 +151,8 @@ CREATE TABLE `fdss_coach_schedule` (
 --
 
 INSERT INTO `fdss_coach_schedule` (`schedule_id`, `coach_id`, `train_info_id`, `last_inspection_date`, `next_due_date`, `status`, `auditor_id`, `assignment_date_time`, `priority`, `special_remarks`, `created_at`, `updated_at`, `user_id`, `schedule_status`) VALUES
-(6, 1, 6, NULL, '2026-06-25', 'Assigned', 6, '2026-05-19 10:01:00', 'Normal', '', '2026-05-18 13:17:45', '2026-05-18 13:17:45', 2, 0);
+(6, 1, 6, NULL, '2026-06-25', 'Completed', 6, '2026-05-19 10:01:00', 'Normal', '', '2026-05-18 13:17:45', '2026-05-19 10:28:41', 2, 0),
+(7, 3, 2, NULL, '2026-06-21', 'Assigned', 6, '2026-05-20 10:00:00', 'High', '', '2026-05-19 10:59:17', '2026-05-19 10:59:17', 2, 0);
 
 -- --------------------------------------------------------
 
@@ -314,7 +329,7 @@ CREATE TABLE `fdss_stations` (
 --
 
 INSERT INTO `fdss_stations` (`station_id`, `station_name`, `division_id`, `status`, `created_at`, `updated_at`) VALUES
-(1, 'dehrdaun', 93, 'Active', '2026-04-06 08:20:26', '2026-04-06 08:20:26'),
+(1, 'DDN', 93, 'Active', '2026-04-06 08:20:26', '2026-05-19 10:46:22'),
 (2, 'Haridwar', 38, 'Active', '2026-04-17 00:05:14', '2026-04-17 00:05:14');
 
 -- --------------------------------------------------------
@@ -342,9 +357,9 @@ CREATE TABLE `fdss_train_coach` (
 --
 
 INSERT INTO `fdss_train_coach` (`coach_id`, `train_info_id`, `coach_no`, `coach_type`, `user_id`, `coach_status`, `status`, `next_inspection_date`, `created_at`, `updated_at`, `schedule_status`) VALUES
-(1, '6', '22334', 'FSDS', 2, 'Intact', 'Active', '2026-06-25', '2026-05-12 08:41:48', '2026-05-18 13:17:45', 1),
-(2, '6', '44556', 'FDSS', 2, 'Intact', 'Active', '2026-05-28', '2026-05-13 06:48:51', '2026-05-18 13:16:55', 0),
-(3, '2', '77889', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-13 08:42:22', '2026-05-18 12:29:18', 0),
+(1, '6', '22334', 'FSDS', 2, 'Intact', 'Active', '2026-06-25', '2026-05-12 08:41:48', '2026-05-19 10:28:41', 0),
+(2, '6', '44556', 'FDSS', 2, 'Intact', 'Active', '2026-05-28', '2026-05-13 06:48:51', '2026-05-19 10:28:49', 0),
+(3, '2', '77889', 'FDSS', 2, 'Intact', 'Active', '2026-06-21', '2026-05-13 08:42:22', '2026-05-19 10:59:17', 1),
 (4, '6', 'SWLWACCN121655', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-14 07:52:02', '2026-05-18 13:00:52', 0),
 (5, NULL, 'SELC55443', 'FDSS', 2, 'Intact', 'Active', '2026-05-22', '2026-05-18 10:16:35', '2026-05-18 12:31:24', 0);
 
@@ -372,7 +387,7 @@ CREATE TABLE `fdss_train_information` (
 INSERT INTO `fdss_train_information` (`train_info_id`, `user_id`, `train_no`, `train_name`, `No_of_Coach`, `status`, `created_at`, `updated_at`) VALUES
 (2, 2, '22895', 'rajdhani expree', 22, 'Active', '2026-05-12 08:23:28', '2026-05-12 08:25:27'),
 (6, 2, '12345', 'express', 3, 'Active', '2026-05-12 08:28:53', '2026-05-12 08:28:53'),
-(7, 2, '11223', 'deawf', 0, 'Active', '2026-05-18 12:13:05', '2026-05-18 12:14:29');
+(7, 2, '11223', 'DDN express', 0, 'Active', '2026-05-18 12:13:05', '2026-05-19 10:54:31');
 
 -- --------------------------------------------------------
 
@@ -407,7 +422,7 @@ CREATE TABLE `fdss_users` (
 
 INSERT INTO `fdss_users` (`user_id`, `user_name`, `user_code`, `username`, `email`, `password_hash`, `full_name`, `phone`, `designation`, `address`, `role`, `station_id`, `start_date`, `end_date`, `status`, `created_by_user_id`, `created_at`, `updated_at`) VALUES
 (1, 'beatle', NULL, 'beatle', 'beatle@gmail.com', '$2y$10$1ayjmt0x/GsO9P9roIU0Fuci5hWqMywFZr6FYSxSKMAA1BCvwJs1y', NULL, NULL, NULL, NULL, 'ORG_ADMIN', 1, '2026-04-06', '2026-07-30', 'Active', NULL, '2026-04-06 08:32:59', '2026-04-14 01:49:42'),
-(2, 'kings', NULL, 'kings', 'kings@gmail.com', '$2y$10$1ayjmt0x/GsO9P9roIU0Fuci5hWqMywFZr6FYSxSKMAA1BCvwJs1y', NULL, NULL, NULL, NULL, 'ORG_ADMIN', 1, '2026-04-10', '2026-08-12', 'Active', NULL, '2026-04-10 08:45:10', '2026-04-14 08:20:17'),
+(2, 'kings', NULL, 'kings', 'kings@gmail.com', '$2y$10$1ayjmt0x/GsO9P9roIU0Fuci5hWqMywFZr6FYSxSKMAA1BCvwJs1y', NULL, '', 'NA', 'dehradun', 'ORG_ADMIN', 1, '2026-04-10', '2026-08-12', 'Active', NULL, '2026-04-10 08:45:10', '2026-05-19 10:18:05'),
 (4, 'admin', NULL, 'admin', 're@gmail.com', '$2y$10$1ayjmt0x/GsO9P9roIU0Fuci5hWqMywFZr6FYSxSKMAA1BCvwJs1y', NULL, NULL, NULL, NULL, 'ADMIN', 1, '2026-04-06', '2026-07-30', 'Active', NULL, '2026-04-06 08:32:59', '2026-05-06 11:42:08'),
 (5, 'Golu', NULL, 'aaa', 'aakh@gmail.com', '$2y$10$7on.bGREoRIspZUXEmKDIuLimMMn9caghLWlzhC5e.LXEAh04iL5q', NULL, 'N/A', 'N/A', NULL, 'AUDITOR', 1, '2026-05-30', '2026-05-30', 'Inactive', 2, '2026-05-06 08:08:19', '2026-05-18 12:27:18'),
 (6, 'akhil gusain', NULL, 'akhil_gusian_12', 'akhilgusain2@mail.com', '$2y$10$wZNR/Ffnno54swOy.G6NC.rbUgxdLf264IFsrk5MPqdSBTR6nT1ZG', NULL, '7830773698', 'Hr', NULL, 'AUDITOR', NULL, NULL, NULL, 'Active', 2, '2026-05-12 08:17:58', '2026-05-12 08:20:25');
@@ -579,7 +594,7 @@ ALTER TABLE `fdss_zones`
 -- AUTO_INCREMENT for table `fdds_coach_inspection`
 --
 ALTER TABLE `fdds_coach_inspection`
-  MODIFY `inspection_id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `inspection_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT for table `fdds_inventory_unit`
@@ -597,7 +612,7 @@ ALTER TABLE `fdss_coach_inventory`
 -- AUTO_INCREMENT for table `fdss_coach_schedule`
 --
 ALTER TABLE `fdss_coach_schedule`
-  MODIFY `schedule_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `schedule_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT for table `fdss_divisions`
