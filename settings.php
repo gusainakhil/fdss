@@ -1,3 +1,173 @@
+<?php
+session_start();
+require_once 'config/db.php';
+
+mysqli_report(MYSQLI_REPORT_OFF);
+
+if (!isset($_SESSION['user_id'])) {
+    header('Location: login.php');
+    exit;
+}
+
+$user_id = (int) $_SESSION['user_id'];
+
+function e($value)
+{
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+}
+
+function field_value($value)
+{
+    $value = trim((string) $value);
+    return $value !== '' ? $value : 'NA';
+}
+
+$message = '';
+$message_type = '';
+$active_tab = 'profile';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'update_profile') {
+        $active_tab = 'profile';
+        $email = trim($_POST['email'] ?? '');
+        $phone = trim($_POST['phone'] ?? '');
+        $designation = trim($_POST['designation'] ?? '');
+        $address = trim($_POST['address'] ?? '');
+
+        if ($email === '') {
+            $message = 'Email address is required.';
+            $message_type = 'danger';
+        } else {
+            $update_query = "UPDATE fdss_users
+                             SET email = ?,
+                                 phone = ?,
+                                 designation = ?,
+                                 address = ?
+                             WHERE user_id = ?";
+
+            $stmt = $conn->prepare($update_query);
+
+            if ($stmt) {
+                $stmt->bind_param(
+                    "ssssi",
+                    $email,
+                    $phone,
+                    $designation,
+                    $address,
+                    $user_id
+                );
+
+                if ($stmt->execute()) {
+                    $message = 'Profile updated successfully.';
+                    $message_type = 'success';
+                } else {
+                    $message = 'Error updating profile.';
+                    $message_type = 'danger';
+                }
+
+                $stmt->close();
+            } else {
+                $message = 'Profile Update SQL Error: ' . $conn->error;
+                $message_type = 'danger';
+            }
+        }
+    } elseif ($action === 'update_password') {
+        $active_tab = 'password';
+        $current_password = $_POST['current_password'] ?? '';
+        $new_password = $_POST['new_password'] ?? '';
+        $confirm_password = $_POST['confirm_password'] ?? '';
+
+        if ($current_password === '' || $new_password === '' || $confirm_password === '') {
+            $message = 'Please fill in all password fields.';
+            $message_type = 'danger';
+        } elseif ($new_password !== $confirm_password) {
+            $message = 'New password and confirm password do not match.';
+            $message_type = 'danger';
+        } elseif (strlen($new_password) < 8) {
+            $message = 'Password must be at least 8 characters long.';
+            $message_type = 'danger';
+        } else {
+            $password_stmt = $conn->prepare("SELECT password_hash FROM fdss_users WHERE user_id = ? LIMIT 1");
+
+            if ($password_stmt) {
+                $password_stmt->bind_param("i", $user_id);
+                $password_stmt->execute();
+                $password_result = $password_stmt->get_result();
+                $password_row = $password_result->fetch_assoc();
+                $password_stmt->close();
+
+                if (!$password_row || !password_verify($current_password, $password_row['password_hash'])) {
+                    $message = 'Current password is incorrect.';
+                    $message_type = 'danger';
+                } else {
+                    $new_password_hash = password_hash($new_password, PASSWORD_DEFAULT);
+                    $update_password_stmt = $conn->prepare("UPDATE fdss_users SET password_hash = ? WHERE user_id = ?");
+
+                    if ($update_password_stmt) {
+                        $update_password_stmt->bind_param("si", $new_password_hash, $user_id);
+
+                        if ($update_password_stmt->execute()) {
+                            $message = 'Password updated successfully.';
+                            $message_type = 'success';
+                        } else {
+                            $message = 'Error updating password.';
+                            $message_type = 'danger';
+                        }
+
+                        $update_password_stmt->close();
+                    } else {
+                        $message = 'Password Update SQL Error: ' . $conn->error;
+                        $message_type = 'danger';
+                    }
+                }
+            } else {
+                $message = 'Password Check SQL Error: ' . $conn->error;
+                $message_type = 'danger';
+            }
+        }
+    }
+}
+
+$user = [
+    'username' => '',
+    'user_name' => '',
+    'email' => '',
+    'phone' => '',
+    'designation' => '',
+    'address' => '',
+    'role' => '',
+    'status' => ''
+];
+
+$user_query = "SELECT
+                  username,
+                  user_name,
+                  email,
+                  phone,
+                  designation,
+                  address,
+                  role,
+                  status
+               FROM fdss_users
+               WHERE user_id = ?
+               LIMIT 1";
+
+$stmt = $conn->prepare($user_query);
+
+if ($stmt) {
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($row = $result->fetch_assoc()) {
+        $user = $row;
+    }
+
+    $stmt->close();
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -35,17 +205,26 @@
                 </div>
             </div>
 
+            <?php if ($message): ?>
+
+                <div class="alert alert-<?php echo e($message_type); ?> alert-dismissible fade show">
+                    <?php echo e($message); ?>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+
+            <?php endif; ?>
+
             <!-- TABS -->
             <div class="content-card">
                 <div class="card-header" style="border-bottom: none; padding-bottom: 0;">
                     <ul class="nav nav-tabs" role="tablist">
                         <li class="nav-item">
-                            <a class="nav-link active" data-bs-toggle="tab" href="#profileTab">
+                            <a class="nav-link <?php echo $active_tab === 'profile' ? 'active' : ''; ?>" data-bs-toggle="tab" href="#profileTab">
                                 <i class="bi bi-person-circle"></i> User Profile
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" data-bs-toggle="tab" href="#passwordTab">
+                            <a class="nav-link <?php echo $active_tab === 'password' ? 'active' : ''; ?>" data-bs-toggle="tab" href="#passwordTab">
                                 <i class="bi bi-key"></i> Change Password
                             </a>
                         </li>
@@ -55,32 +234,14 @@
                 <!-- TAB CONTENT -->
                 <div class="tab-content">
                     <!-- USER PROFILE TAB -->
-                    <div id="profileTab" class="tab-pane fade show active">
+                    <div id="profileTab" class="tab-pane fade <?php echo $active_tab === 'profile' ? 'show active' : ''; ?>">
                         <div class="card-body">
-                            <form id="profileForm">
+                            <form id="profileForm" method="POST">
+                                <input type="hidden" name="action" value="update_profile">
+
                                 <h6 class="mb-4" style="font-weight: 600; text-transform: uppercase; color: #2c3e50;">
                                     <i class="bi bi-person-circle me-2"></i>My Profile Information
                                 </h6>
-
-                                <!-- Profile Photo -->
-                                <div class="row g-3 mb-4">
-                                    <div class="col-12">
-                                        <div style="display: flex; align-items: center; gap: 20px;">
-                                            <div style="width: 100px; height: 100px; border-radius: 50%; background: #e9ecef; display: flex; align-items: center; justify-content: center; border: 2px solid #dee2e6;">
-                                                <i class="bi bi-person-fill" style="font-size: 3rem; color: #6c757d;"></i>
-                                            </div>
-                                            <div>
-                                                <button type="button" class="btn btn-sm btn-primary" onclick="document.getElementById('profilePhoto').click()">
-                                                    <i class="bi bi-cloud-upload"></i> Upload Photo
-                                                </button>
-                                                <input type="file" id="profilePhoto" accept="image/*" style="display: none;">
-                                                <p class="text-muted small mt-2">JPG, PNG or GIF (Max 5MB)</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <hr>
 
                                 <!-- Personal Information -->
                                 <h6 class="mb-3 mt-4" style="font-weight: 600; text-transform: uppercase; color: #2c3e50;">Personal Information</h6>
@@ -88,80 +249,62 @@
                                 <div class="row g-3 mb-4">
                                     <div class="col-md-6">
                                         <div class="form-group">
-                                            <label class="form-label fw-semibold">Full Name</label>
-                                            <input type="text" class="form-control" value="Ramesh Kumar" required>
+                                            <label class="form-label fw-semibold">Username</label>
+                                            <input type="text" class="form-control" value="<?php echo e(field_value($user['username'])); ?>" disabled>
                                         </div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="form-group">
-                                            <label class="form-label fw-semibold">Employee ID</label>
-                                            <input type="text" class="form-control" value="AUD-001" disabled>
+                                            <label class="form-label fw-semibold">User Name</label>
+                                            <input type="text" class="form-control" value="<?php echo e(field_value($user['user_name'])); ?>" disabled>
                                         </div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="form-group">
                                             <label class="form-label fw-semibold">Email Address</label>
-                                            <input type="email" class="form-control" value="ramesh.kumar@irctc.co.in" required>
+                                            <input type="email" class="form-control" name="email" value="<?php echo e($user['email']); ?>" required>
                                         </div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="form-group">
                                             <label class="form-label fw-semibold">Phone Number</label>
-                                            <input type="tel" class="form-control" value="+91-9876543210" placeholder="+91-XXXXXXXXXX">
+                                            <input type="tel" class="form-control" name="phone" value="<?php echo e($user['phone']); ?>" placeholder="+91-XXXXXXXXXX">
                                         </div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="form-group">
                                             <label class="form-label fw-semibold">Designation</label>
-                                            <input type="text" class="form-control" value="Senior Auditor">
+                                            <input type="text" class="form-control" name="designation" value="<?php echo e(field_value($user['designation'])); ?>">
                                         </div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="form-group">
                                             <label class="form-label fw-semibold">Department</label>
-                                            <input type="text" class="form-control" value="FDSS Operations">
+                                            <input type="text" class="form-control" value="NA" disabled>
                                         </div>
                                     </div>
-                                    <div class="col-md-6">
+                                    <div class="col-12">
                                         <div class="form-group">
-                                            <label class="form-label fw-semibold">Station / Zone</label>
-                                            <input type="text" class="form-control" value="New Delhi Junction">
+                                            <label class="form-label fw-semibold">Address</label>
+                                            <textarea class="form-control" name="address" rows="3"><?php echo e($user['address']); ?></textarea>
                                         </div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="form-group">
                                             <label class="form-label fw-semibold">Role</label>
-                                            <input type="text" class="form-control" value="Auditor" disabled>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <hr>
-
-                                <h6 class="mb-3 mt-4" style="font-weight: 600; text-transform: uppercase; color: #2c3e50;">Account Information</h6>
-
-                                <div class="row g-3 mb-4">
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label class="form-label fw-semibold">Last Login</label>
-                                            <input type="text" class="form-control" value="09 May 2026, 09:45 AM" disabled>
+                                            <input type="text" class="form-control" value="<?php echo e(field_value($user['role'])); ?>" disabled>
                                         </div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="form-group">
-                                            <label class="form-label fw-semibold">Account Status</label>
-                                            <div class="input-group">
-                                                <span class="input-group-text" style="background: #d1e7dd; border-color: #badbcc;">
-                                                    <i class="bi bi-check-circle-fill" style="color: #0a3622;"></i>
-                                                </span>
-                                                <input type="text" class="form-control" value="Active" disabled>
-                                            </div>
+                                            <label class="form-label fw-semibold">Status</label>
+                                            <input type="text" class="form-control" value="<?php echo e(field_value($user['status'])); ?>" disabled>
                                         </div>
                                     </div>
                                 </div>
 
                                 <div class="mt-4">
-                                    <button type="submit" class="btn btn-primary" onclick="saveProfile(event)">
+                                    <button type="submit" class="btn btn-primary">
                                         <i class="bi bi-save"></i> Save Changes
                                     </button>
                                     <button type="reset" class="btn btn-secondary">
@@ -173,9 +316,11 @@
                     </div>
 
                     <!-- CHANGE PASSWORD TAB -->
-                    <div id="passwordTab" class="tab-pane fade">
+                    <div id="passwordTab" class="tab-pane fade <?php echo $active_tab === 'password' ? 'show active' : ''; ?>">
                         <div class="card-body">
-                            <form id="passwordForm">
+                            <form id="passwordForm" method="POST">
+                                <input type="hidden" name="action" value="update_password">
+
                                 <h6 class="mb-4" style="font-weight: 600; text-transform: uppercase; color: #2c3e50;">
                                     <i class="bi bi-key me-2"></i>Change Your Password
                                 </h6>
@@ -190,7 +335,7 @@
                                         <div class="form-group">
                                             <label class="form-label fw-semibold">Current Password</label>
                                             <div class="input-group">
-                                                <input type="password" class="form-control" id="currentPassword" placeholder="Enter your current password" required>
+                                                <input type="password" class="form-control" id="currentPassword" name="current_password" placeholder="Enter your current password" required>
                                                 <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('currentPassword')">
                                                     <i class="bi bi-eye"></i>
                                                 </button>
@@ -202,7 +347,7 @@
                                         <div class="form-group">
                                             <label class="form-label fw-semibold">New Password</label>
                                             <div class="input-group">
-                                                <input type="password" class="form-control" id="newPassword" placeholder="Enter new password" required>
+                                                <input type="password" class="form-control" id="newPassword" name="new_password" placeholder="Enter new password" required>
                                                 <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('newPassword')">
                                                     <i class="bi bi-eye"></i>
                                                 </button>
@@ -220,7 +365,7 @@
                                         <div class="form-group">
                                             <label class="form-label fw-semibold">Confirm New Password</label>
                                             <div class="input-group">
-                                                <input type="password" class="form-control" id="confirmPassword" placeholder="Confirm new password" required>
+                                                <input type="password" class="form-control" id="confirmPassword" name="confirm_password" placeholder="Confirm new password" required>
                                                 <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('confirmPassword')">
                                                     <i class="bi bi-eye"></i>
                                                 </button>
@@ -238,7 +383,7 @@
                                 </div>
 
                                 <div class="mt-4">
-                                    <button type="submit" class="btn btn-primary" onclick="changePassword(event)">
+                                    <button type="submit" class="btn btn-primary">
                                         <i class="bi bi-save"></i> Change Password
                                     </button>
                                     <button type="reset" class="btn btn-secondary">
@@ -331,74 +476,6 @@
             }
         });
 
-        /* ──────────────────────────────────────────
-           Save profile changes
-        ────────────────────────────────────────── */
-        function saveProfile(e) {
-            e.preventDefault();
-            const form = document.getElementById('profileForm');
-            
-            // Show success message
-            const alert = document.createElement('div');
-            alert.className = 'alert alert-success alert-dismissible fade show';
-            alert.innerHTML = `
-                <i class="bi bi-check-circle me-2"></i>
-                <strong>Success!</strong> Your profile has been updated successfully.
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
-            form.parentElement.insertBefore(alert, form);
-
-            // Auto-dismiss after 4 seconds
-            setTimeout(() => alert.remove(), 4000);
-        }
-
-        /* ──────────────────────────────────────────
-           Change password
-        ────────────────────────────────────────── */
-        function changePassword(e) {
-            e.preventDefault();
-            const currentPass = document.getElementById('currentPassword').value;
-            const newPass = document.getElementById('newPassword').value;
-            const confirmPass = document.getElementById('confirmPassword').value;
-
-            // Validation
-            if (!currentPass || !newPass || !confirmPass) {
-                alert('Please fill in all password fields');
-                return;
-            }
-
-            if (newPass !== confirmPass) {
-                alert('New passwords do not match');
-                return;
-            }
-
-            if (newPass.length < 8) {
-                alert('Password must be at least 8 characters long');
-                return;
-            }
-
-            // Mock validation: accept any non-empty current password for demo
-            const form = document.getElementById('passwordForm');
-            
-            // Show success message
-            const alert = document.createElement('div');
-            alert.className = 'alert alert-success alert-dismissible fade show';
-            alert.innerHTML = `
-                <i class="bi bi-check-circle me-2"></i>
-                <strong>Success!</strong> Your password has been changed successfully.
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
-            form.parentElement.insertBefore(alert, form);
-
-            // Clear form
-            form.reset();
-            document.getElementById('passwordMatch').classList.add('d-none');
-            document.getElementById('strengthBar').style.width = '0%';
-            document.getElementById('strengthText').textContent = 'Strength: Weak';
-
-            // Auto-dismiss after 4 seconds
-            setTimeout(() => alert.remove(), 4000);
-        }
     </script>
 </body>
 </html>

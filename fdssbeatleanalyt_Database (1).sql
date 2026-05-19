@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: May 18, 2026 at 05:22 PM
+-- Generation Time: May 19, 2026 at 03:32 PM
 -- Server version: 10.11.17-MariaDB
 -- PHP Version: 8.4.21
 
@@ -31,17 +31,15 @@ CREATE TABLE `fdds_coach_inspection` (
   `inspection_id` int(11) NOT NULL,
   `schedule_id` int(11) DEFAULT NULL,
   `train_info_id` bigint(20) DEFAULT NULL,
-  `coach_no` varchar(50) NOT NULL,
+  `coach_id` int(11) NOT NULL,
   `auditor_id` int(11) DEFAULT NULL,
   `user_id` int(11) NOT NULL,
-  `inspection_date` date DEFAULT NULL,
-  `start_time` time DEFAULT NULL,
-  `end_time` time DEFAULT NULL,
+  `inventory_id` int(11) NOT NULL,
+  `tool_name` varchar(255) NOT NULL,
+  `Conditions` varchar(255) NOT NULL,
+  `unit_id` int(11) NOT NULL,
   `status` enum('Pending','In Progress','Completed') DEFAULT 'Pending',
-  `zone_name` varchar(120) DEFAULT NULL,
-  `station_name` varchar(120) DEFAULT NULL,
   `remarks` text DEFAULT NULL,
-  `tool_report` text DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
@@ -103,6 +101,14 @@ CREATE TABLE `fdss_coach_inventory` (
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 
+--
+-- Dumping data for table `fdss_coach_inventory`
+--
+
+INSERT INTO `fdss_coach_inventory` (`id`, `coach_id`, `inventory_unit_id`, `user_id`, `status`, `created_at`, `updated_at`) VALUES
+(11, 5, 6, 2, 'Active', '2026-05-18 12:03:41', '2026-05-18 12:03:41'),
+(12, 5, 4, 2, 'Active', '2026-05-18 12:04:23', '2026-05-18 12:04:23');
+
 -- --------------------------------------------------------
 
 --
@@ -111,7 +117,7 @@ CREATE TABLE `fdss_coach_inventory` (
 
 CREATE TABLE `fdss_coach_schedule` (
   `schedule_id` int(11) NOT NULL,
-  `coach_no` varchar(50) NOT NULL,
+  `coach_id` int(11) NOT NULL,
   `train_info_id` bigint(20) DEFAULT NULL,
   `last_inspection_date` date DEFAULT NULL,
   `next_due_date` date DEFAULT NULL,
@@ -130,10 +136,8 @@ CREATE TABLE `fdss_coach_schedule` (
 -- Dumping data for table `fdss_coach_schedule`
 --
 
-INSERT INTO `fdss_coach_schedule` (`schedule_id`, `coach_no`, `train_info_id`, `last_inspection_date`, `next_due_date`, `status`, `auditor_id`, `assignment_date_time`, `priority`, `special_remarks`, `created_at`, `updated_at`, `user_id`, `schedule_status`) VALUES
-(1, '22334', 6, '2026-05-12', '2026-05-12', 'Assigned', 6, '2026-05-12 18:52:00', 'High', 'this ie best', '2026-05-12 11:23:02', '2026-05-12 11:23:02', 2, 0),
-(2, '22334', 6, '2026-05-12', '2026-05-12', 'Assigned', 5, '2026-05-16 16:53:00', 'Normal', 'rfr', '2026-05-12 11:23:46', '2026-05-12 11:23:46', 2, 0),
-(3, '22334', 6, '2026-05-13', '2026-05-14', 'Assigned', 6, '2026-05-13 20:44:00', 'High', '', '2026-05-12 12:14:47', '2026-05-12 12:19:53', 2, 0);
+INSERT INTO `fdss_coach_schedule` (`schedule_id`, `coach_id`, `train_info_id`, `last_inspection_date`, `next_due_date`, `status`, `auditor_id`, `assignment_date_time`, `priority`, `special_remarks`, `created_at`, `updated_at`, `user_id`, `schedule_status`) VALUES
+(6, 1, 6, NULL, '2026-06-25', 'Assigned', 6, '2026-05-19 10:01:00', 'Normal', '', '2026-05-18 13:17:45', '2026-05-18 13:17:45', 2, 0);
 
 -- --------------------------------------------------------
 
@@ -338,11 +342,11 @@ CREATE TABLE `fdss_train_coach` (
 --
 
 INSERT INTO `fdss_train_coach` (`coach_id`, `train_info_id`, `coach_no`, `coach_type`, `user_id`, `coach_status`, `status`, `next_inspection_date`, `created_at`, `updated_at`, `schedule_status`) VALUES
-(1, '6', '22334', 'FSDS', 2, 'Intact', 'Active', '2026-05-14', '2026-05-12 08:41:48', '2026-05-13 09:32:45', 1),
-(2, '6', '44556', 'FDSS', 2, 'Intact', 'Active', '2026-05-15', '2026-05-13 06:48:51', '2026-05-13 08:40:36', 0),
-(3, '2', '77889', 'FDSS', 2, 'Intact', 'Active', '2026-05-30', '2026-05-13 08:42:22', '2026-05-13 08:42:22', 0),
-(4, '6', 'SW LWACCN 121655', 'FSDS', 2, 'Intact', 'Active', '2026-06-25', '2026-05-14 07:52:02', '2026-05-14 07:53:59', 0),
-(5, NULL, 'SELC55443', 'FDSS', 2, 'Intact', 'Active', '2026-05-22', '2026-05-18 10:16:35', '2026-05-18 10:26:53', 0);
+(1, '6', '22334', 'FSDS', 2, 'Intact', 'Active', '2026-06-25', '2026-05-12 08:41:48', '2026-05-18 13:17:45', 1),
+(2, '6', '44556', 'FDSS', 2, 'Intact', 'Active', '2026-05-28', '2026-05-13 06:48:51', '2026-05-18 13:16:55', 0),
+(3, '2', '77889', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-13 08:42:22', '2026-05-18 12:29:18', 0),
+(4, '6', 'SWLWACCN121655', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-14 07:52:02', '2026-05-18 13:00:52', 0),
+(5, NULL, 'SELC55443', 'FDSS', 2, 'Intact', 'Active', '2026-05-22', '2026-05-18 10:16:35', '2026-05-18 12:31:24', 0);
 
 -- --------------------------------------------------------
 
@@ -355,7 +359,7 @@ CREATE TABLE `fdss_train_information` (
   `user_id` int(11) NOT NULL,
   `train_no` varchar(50) NOT NULL,
   `train_name` varchar(150) NOT NULL,
-  `No_of_Coach` int(11) NOT NULL,
+  `No_of_Coach` int(11) DEFAULT NULL,
   `status` enum('Active','Inactive') DEFAULT 'Active',
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
@@ -367,7 +371,8 @@ CREATE TABLE `fdss_train_information` (
 
 INSERT INTO `fdss_train_information` (`train_info_id`, `user_id`, `train_no`, `train_name`, `No_of_Coach`, `status`, `created_at`, `updated_at`) VALUES
 (2, 2, '22895', 'rajdhani expree', 22, 'Active', '2026-05-12 08:23:28', '2026-05-12 08:25:27'),
-(6, 2, '12345', 'express', 3, 'Active', '2026-05-12 08:28:53', '2026-05-12 08:28:53');
+(6, 2, '12345', 'express', 3, 'Active', '2026-05-12 08:28:53', '2026-05-12 08:28:53'),
+(7, 2, '11223', 'deawf', 0, 'Active', '2026-05-18 12:13:05', '2026-05-18 12:14:29');
 
 -- --------------------------------------------------------
 
@@ -404,7 +409,7 @@ INSERT INTO `fdss_users` (`user_id`, `user_name`, `user_code`, `username`, `emai
 (1, 'beatle', NULL, 'beatle', 'beatle@gmail.com', '$2y$10$1ayjmt0x/GsO9P9roIU0Fuci5hWqMywFZr6FYSxSKMAA1BCvwJs1y', NULL, NULL, NULL, NULL, 'ORG_ADMIN', 1, '2026-04-06', '2026-07-30', 'Active', NULL, '2026-04-06 08:32:59', '2026-04-14 01:49:42'),
 (2, 'kings', NULL, 'kings', 'kings@gmail.com', '$2y$10$1ayjmt0x/GsO9P9roIU0Fuci5hWqMywFZr6FYSxSKMAA1BCvwJs1y', NULL, NULL, NULL, NULL, 'ORG_ADMIN', 1, '2026-04-10', '2026-08-12', 'Active', NULL, '2026-04-10 08:45:10', '2026-04-14 08:20:17'),
 (4, 'admin', NULL, 'admin', 're@gmail.com', '$2y$10$1ayjmt0x/GsO9P9roIU0Fuci5hWqMywFZr6FYSxSKMAA1BCvwJs1y', NULL, NULL, NULL, NULL, 'ADMIN', 1, '2026-04-06', '2026-07-30', 'Active', NULL, '2026-04-06 08:32:59', '2026-05-06 11:42:08'),
-(5, 'Golu', NULL, 'aaa', 'aakh@gmail.com', '$2y$10$7on.bGREoRIspZUXEmKDIuLimMMn9caghLWlzhC5e.LXEAh04iL5q', NULL, 'N/A', 'N/A', NULL, 'AUDITOR', 1, '2026-05-30', '2026-05-30', 'Active', 2, '2026-05-06 08:08:19', '2026-05-12 08:20:14'),
+(5, 'Golu', NULL, 'aaa', 'aakh@gmail.com', '$2y$10$7on.bGREoRIspZUXEmKDIuLimMMn9caghLWlzhC5e.LXEAh04iL5q', NULL, 'N/A', 'N/A', NULL, 'AUDITOR', 1, '2026-05-30', '2026-05-30', 'Inactive', 2, '2026-05-06 08:08:19', '2026-05-18 12:27:18'),
 (6, 'akhil gusain', NULL, 'akhil_gusian_12', 'akhilgusain2@mail.com', '$2y$10$wZNR/Ffnno54swOy.G6NC.rbUgxdLf264IFsrk5MPqdSBTR6nT1ZG', NULL, '7830773698', 'Hr', NULL, 'AUDITOR', NULL, NULL, NULL, 'Active', 2, '2026-05-12 08:17:58', '2026-05-12 08:20:25');
 
 -- --------------------------------------------------------
@@ -458,7 +463,10 @@ ALTER TABLE `fdds_coach_inspection`
   ADD KEY `idx_schedule` (`schedule_id`),
   ADD KEY `idx_train_info` (`train_info_id`),
   ADD KEY `idx_auditor` (`auditor_id`),
-  ADD KEY `user_id` (`user_id`);
+  ADD KEY `user_id` (`user_id`),
+  ADD KEY `coach_id` (`coach_id`),
+  ADD KEY `unit_id` (`unit_id`),
+  ADD KEY `inventory_id` (`inventory_id`);
 
 --
 -- Indexes for table `fdds_inventory_unit`
@@ -483,7 +491,7 @@ ALTER TABLE `fdss_coach_inventory`
 --
 ALTER TABLE `fdss_coach_schedule`
   ADD PRIMARY KEY (`schedule_id`),
-  ADD KEY `idx_coach_no` (`coach_no`),
+  ADD KEY `idx_coach_no` (`coach_id`),
   ADD KEY `idx_auditor` (`auditor_id`),
   ADD KEY `idx_status` (`status`),
   ADD KEY `idx_train_info` (`train_info_id`),
@@ -583,13 +591,13 @@ ALTER TABLE `fdds_inventory_unit`
 -- AUTO_INCREMENT for table `fdss_coach_inventory`
 --
 ALTER TABLE `fdss_coach_inventory`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- AUTO_INCREMENT for table `fdss_coach_schedule`
 --
 ALTER TABLE `fdss_coach_schedule`
-  MODIFY `schedule_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `schedule_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `fdss_divisions`
@@ -625,7 +633,7 @@ ALTER TABLE `fdss_train_coach`
 -- AUTO_INCREMENT for table `fdss_train_information`
 --
 ALTER TABLE `fdss_train_information`
-  MODIFY `train_info_id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `train_info_id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT for table `fdss_users`
@@ -650,7 +658,10 @@ ALTER TABLE `fdds_coach_inspection`
   ADD CONSTRAINT `fdds_coach_inspection_ibfk_1` FOREIGN KEY (`schedule_id`) REFERENCES `fdss_coach_schedule` (`schedule_id`),
   ADD CONSTRAINT `fdds_coach_inspection_ibfk_2` FOREIGN KEY (`auditor_id`) REFERENCES `fdss_users` (`user_id`),
   ADD CONSTRAINT `fdds_coach_inspection_ibfk_3` FOREIGN KEY (`train_info_id`) REFERENCES `fdss_train_information` (`train_info_id`),
-  ADD CONSTRAINT `fdds_coach_inspection_ibfk_4` FOREIGN KEY (`user_id`) REFERENCES `fdss_users` (`user_id`);
+  ADD CONSTRAINT `fdds_coach_inspection_ibfk_4` FOREIGN KEY (`user_id`) REFERENCES `fdss_users` (`user_id`),
+  ADD CONSTRAINT `fdds_coach_inspection_ibfk_5` FOREIGN KEY (`coach_id`) REFERENCES `fdss_train_coach` (`coach_id`),
+  ADD CONSTRAINT `fdds_coach_inspection_ibfk_6` FOREIGN KEY (`unit_id`) REFERENCES `fdds_inventory_unit` (`unit_id`),
+  ADD CONSTRAINT `fdds_coach_inspection_ibfk_7` FOREIGN KEY (`inventory_id`) REFERENCES `fdss_Inventory_Management` (`inventory_id`);
 
 --
 -- Constraints for table `fdds_inventory_unit`

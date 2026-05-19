@@ -100,6 +100,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         } else {
 
+            $status_check_query = "SELECT status
+                                   FROM fdss_coach_schedule
+                                   WHERE schedule_id = ?
+                                   AND user_id = ?
+                                   LIMIT 1";
+
+            $status_check_stmt = $conn->prepare($status_check_query);
+            $current_schedule_status = null;
+            $schedule_coach_id = null;
+
+            if ($status_check_stmt) {
+                $status_check_stmt->bind_param("ii", $schedule_id, $user_id);
+                $status_check_stmt->execute();
+                $status_check_result = $status_check_stmt->get_result();
+
+                if ($status_row = $status_check_result->fetch_assoc()) {
+                    $current_schedule_status = $status_row['status'];
+                }
+
+                $status_check_stmt->close();
+            }
+
+            if ($current_schedule_status === null) {
+
+                $message = "Schedule not found.";
+                $message_type = "danger";
+
+            } elseif ($current_schedule_status === 'Completed') {
+
+                $message = "Completed schedule cannot be edited.";
+                $message_type = "danger";
+
+            } else {
+
+            if ($schedule_uses_coach_id) {
+                $coach_query = "SELECT coach_id
+                                FROM fdss_coach_schedule
+                                WHERE schedule_id = ?
+                                AND user_id = ?
+                                LIMIT 1";
+
+                $coach_stmt = $conn->prepare($coach_query);
+
+                if ($coach_stmt) {
+                    $coach_stmt->bind_param("ii", $schedule_id, $user_id);
+                    $coach_stmt->execute();
+                    $coach_result = $coach_stmt->get_result();
+
+                    if ($coach_row = $coach_result->fetch_assoc()) {
+                        $schedule_coach_id = (int) $coach_row['coach_id'];
+                    }
+
+                    $coach_stmt->close();
+                }
+            }
+
             $update_query = "UPDATE fdss_coach_schedule SET
 
                 auditor_id = ?,
@@ -109,7 +165,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 status = ?
 
                 WHERE schedule_id = ?
-                AND user_id = ?";
+                AND user_id = ?
+                AND status <> 'Completed'";
 
             $stmt = $conn->prepare($update_query);
 
@@ -128,6 +185,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if ($stmt->execute()) {
 
+                    if ($status === 'Completed' && $schedule_coach_id > 0) {
+                        $coach_status_query = "UPDATE fdss_train_coach
+                                               SET schedule_status = 0
+                                               WHERE coach_id = ?
+                                               AND user_id = ?";
+
+                        $coach_status_stmt = $conn->prepare($coach_status_query);
+
+                        if ($coach_status_stmt) {
+                            $coach_status_stmt->bind_param(
+                                "ii",
+                                $schedule_coach_id,
+                                $user_id
+                            );
+
+                            $coach_status_stmt->execute();
+                            $coach_status_stmt->close();
+                        }
+                    }
+
                     $message = "Schedule updated successfully!";
                     $message_type = "success";
 
@@ -143,6 +220,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $message = "SQL Error: " . $conn->error;
                 $message_type = "danger";
+            }
             }
         }
     }
@@ -161,9 +239,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $train_info_id = (int) ($_POST['train_info_id'] ?? 0);
 
+        $status_check_query = "SELECT status
+                               FROM fdss_coach_schedule
+                               WHERE schedule_id = ?
+                               AND user_id = ?
+                               LIMIT 1";
+
+        $status_check_stmt = $conn->prepare($status_check_query);
+        $current_schedule_status = null;
+
+        if ($status_check_stmt) {
+            $status_check_stmt->bind_param("ii", $schedule_id, $user_id);
+            $status_check_stmt->execute();
+            $status_check_result = $status_check_stmt->get_result();
+
+            if ($status_row = $status_check_result->fetch_assoc()) {
+                $current_schedule_status = $status_row['status'];
+            }
+
+            $status_check_stmt->close();
+        }
+
+        if ($current_schedule_status === null) {
+
+            $message = "Schedule not found.";
+            $message_type = "danger";
+
+        } elseif ($current_schedule_status === 'Completed') {
+
+            $message = "Completed schedule cannot be deleted.";
+            $message_type = "danger";
+
+        } else {
+
         $delete_query = "DELETE FROM fdss_coach_schedule
                          WHERE schedule_id = ?
-                         AND user_id = ?";
+                         AND user_id = ?
+                         AND status <> 'Completed'";
 
         $stmt = $conn->prepare($delete_query);
 
@@ -175,7 +287,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $user_id
             );
 
-            if ($stmt->execute()) {
+            if ($stmt->execute() && $stmt->affected_rows > 0) {
 
                 /*
                 |--------------------------------------------------------------------------
@@ -210,11 +322,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             } else {
 
-                $message = "Error deleting schedule.";
+                $message = "Completed schedule cannot be deleted.";
                 $message_type = "danger";
             }
 
             $stmt->close();
+        }
         }
     }
 }
@@ -563,6 +676,8 @@ if ($stmt) {
 
                         <?php foreach ($schedules as $schedule): ?>
 
+                            <?php $is_completed = $schedule['status'] === 'Completed'; ?>
+
                             <tr>
 
                                 <td>
@@ -670,6 +785,28 @@ if ($stmt) {
 
                                 <td>
 
+                                    <?php if ($is_completed): ?>
+
+                                        <button
+                                            class="btn btn-sm btn-outline-secondary"
+                                            title="Completed schedule cannot be edited"
+                                            disabled>
+
+                                            <i class="bi bi-pencil"></i>
+
+                                        </button>
+
+                                        <button
+                                            class="btn btn-sm btn-outline-secondary"
+                                            title="Completed schedule cannot be deleted"
+                                            disabled>
+
+                                            <i class="bi bi-trash"></i>
+
+                                        </button>
+
+                                    <?php else: ?>
+
                                     <button
                                         class="btn btn-sm btn-outline-primary"
                                         onclick="editSchedule(
@@ -698,6 +835,8 @@ if ($stmt) {
                                         <i class="bi bi-trash"></i>
 
                                     </button>
+
+                                    <?php endif; ?>
 
                                 </td>
 

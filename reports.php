@@ -134,30 +134,6 @@
                 display: inline-block !important;
             }
 
-            /* Photo thumbnails */
-            .photo-thumb {
-                border: 1px solid #000 !important;
-                font-size: 8pt !important;
-                color: #000 !important;
-                background: #f5f5f5 !important;
-                width: 54px !important;
-                height: 40px !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-            }
-            .photo-thumb.has-photo {
-                background: #e0e0e0 !important;
-            }
-
-            /* ── Remarks box ── */
-            #rpt-remarks {
-                border: 1px solid #000 !important;
-                padding: 8px !important;
-                font-size: 10pt !important;
-                min-height: 50px !important;
-            }
-
             /* ── Signature table ── */
             .signature-table {
                 width: 100% !important;
@@ -227,20 +203,6 @@
         .signature-table td {
             height: 56px;
             border: 1px solid #ccc;
-        }
-        .photo-thumb {
-            width: 54px;
-            height: 44px;
-            border: 1px solid #aaa;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.72rem;
-            color: #666;
-            margin: auto;
-        }
-        .photo-thumb.has-photo {
-            background: #e8f4fd;
         }
         .badge-ok   { background: #d4edda; color: #155724; font-weight: 600; padding: 3px 10px; border-radius: 4px; }
         .badge-issue{ background: #f8d7da; color: #721c24; font-weight: 600; padding: 3px 10px; border-radius: 4px; }
@@ -427,96 +389,74 @@
                                         <th style="width:130px;">Serial No.</th>
                                         <th style="width:90px;">Condition</th>
                                         <th>Remarks</th>
-                                        <th style="width:90px;">Photo Evidence</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <tr>
                                         <td class="text-center">1</td>
                                         <td>
-                                            <strong>Hooter</strong><br>
-                                            <small class="text-muted">FDSS Alert System</small>
+                                            <strong>Hooter</strong>
                                         </td>
                                         <td id="s1" class="text-center">HT-2024-001</td>
                                         <td class="text-center"><span id="c1" class="badge-ok">OK</span></td>
                                         <td id="r1">Functioning properly, audible alarm tested.</td>
-                                        <td><div id="p1" class="photo-thumb has-photo">Photo</div></td>
                                     </tr>
                                     <tr>
                                         <td class="text-center">2</td>
                                         <td>
-                                            <strong>Flasher Light</strong><br>
-                                            <small class="text-muted">FDSS Visual Alert</small>
+                                            <strong>Flasher Light</strong>
                                         </td>
                                         <td id="s2" class="text-center">FL-2024-002</td>
                                         <td class="text-center"><span id="c2" class="badge-ok">OK</span></td>
                                         <td id="r2">Flashing correctly, no fault detected.</td>
-                                        <td><div id="p2" class="photo-thumb has-photo">Photo</div></td>
                                     </tr>
                                     <tr>
                                         <td class="text-center">3</td>
                                         <td>
-                                            <strong>Smoke Sensor (Genset Area)</strong><br>
-                                            <small class="text-muted">FDSS Smoke Detection</small>
+                                            <strong>Smoke Sensor (Genset Area)</strong>
                                         </td>
                                         <td id="s3" class="text-center">SS-GEN-003</td>
                                         <td class="text-center"><span id="c3" class="badge-issue">Issue</span></td>
                                         <td id="r3">Blinking red error light. Needs replacement.</td>
-                                        <td><div id="p3" class="photo-thumb has-photo">Photo</div></td>
                                     </tr>
                                     <tr>
                                         <td class="text-center">4</td>
                                         <td>
-                                            <strong>Smoke Sensor (Crew Area)</strong><br>
-                                            <small class="text-muted">FDSS Smoke Detection</small>
+                                            <strong>Smoke Sensor (Crew Area)</strong>
                                         </td>
                                         <td id="s4" class="text-center">SS-CRW-004</td>
                                         <td class="text-center"><span id="c4" class="badge-ok">OK</span></td>
                                         <td id="r4">Sensor responsive, self-test passed.</td>
-                                        <td><div id="p4" class="photo-thumb has-photo">Photo</div></td>
                                     </tr>
                                     <tr>
                                         <td class="text-center">5</td>
                                         <td>
-                                            <strong>Smoke Sensor (Guard Area)</strong><br>
-                                            <small class="text-muted">FDSS Smoke Detection</small>
+                                            <strong>Smoke Sensor (Guard Area)</strong>
                                         </td>
                                         <td id="s5" class="text-center">SS-GRD-005</td>
                                         <td class="text-center"><span id="c5" class="badge-ok">OK</span></td>
                                         <td id="r5">No fault, clean sensor head.</td>
-                                        <td><div id="p5" class="photo-thumb has-photo">Photo</div></td>
                                     </tr>
                                     <tr>
                                         <td class="text-center">6</td>
                                         <td>
-                                            <strong>Heat Sensor (Genset / Kitchen Area)</strong><br>
-                                            <small class="text-muted">FDSS Heat Detection</small>
+                                            <strong>Heat Sensor (Genset / Kitchen Area)</strong>
                                         </td>
                                         <td id="s6" class="text-center">HS-GEN-006</td>
                                         <td class="text-center"><span id="c6" class="badge-ok">OK</span></td>
                                         <td id="r6">Temperature threshold tested and verified.</td>
-                                        <td><div id="p6" class="photo-thumb has-photo">Photo</div></td>
                                     </tr>
                                     <tr>
                                         <td class="text-center">7</td>
                                         <td>
-                                            <strong>Heat Detection Test – LWLRRM</strong><br>
-                                            <small class="text-muted">Engine shutdown on temp raise</small>
+                                            <strong>Heat Detection Test – LWLRRM</strong>
                                         </td>
                                         <td id="s7" class="text-center">HD-LWL-007</td>
                                         <td class="text-center"><span id="c7" class="badge-na">N/A</span></td>
                                         <td id="r7">Deferred to next service cycle.</td>
-                                        <td><div id="p7" class="photo-thumb">No Photo</div></td>
                                     </tr>
                                 </tbody>
                             </table>
-                        </div>
-
-                        <!-- Final Remarks -->
-                        <div class="section-title">Final Inspection Remarks</div>
-                        <div style="border:1px solid #ccc; padding:10px; min-height:60px; font-size:0.88rem;" id="rpt-remarks">
-                            Inspection completed. Smoke Sensor (Genset Area) requires replacement before next run.
-                            All other FDSS components are operational.
                         </div>
 
                         <!-- Verification / Signature -->
@@ -756,7 +696,6 @@
             document.getElementById('rpt-start').textContent   = r.start;
             document.getElementById('rpt-end').textContent     = r.end ?? '—';
             document.getElementById('rpt-status').textContent  = r.status;
-            document.getElementById('rpt-remarks').textContent = r.remarks || '—';
 
             // Fill tool rows
             r.tools.forEach((t, i) => {
@@ -766,9 +705,6 @@
                 const cEl = document.getElementById(`c${n}`);
                 cEl.textContent  = t.c;
                 cEl.className    = t.c === 'OK' ? 'badge-ok' : t.c === 'Issue' ? 'badge-issue' : 'badge-na';
-                const pEl = document.getElementById(`p${n}`);
-                pEl.textContent  = t.photo ? 'Photo' : 'No Photo';
-                pEl.className    = `photo-thumb${t.photo ? ' has-photo' : ''}`;
             });
 
             // Show/hide sections
