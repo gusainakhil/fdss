@@ -273,7 +273,7 @@ function e($value) {
                         <label for="trainFilter" class="form-label">Select Train Number</label>
                         <select id="trainFilter" name="train_info_id" class="form-select" onchange="this.form.submit()">
                             <option value="all">All Trains</option>
-                            <option value="Detached" <?php echo $selected_train === 'Detached' ? 'selected' : ''; ?>>Detached</option>
+                            <!-- <option value="Detached" <?php echo $selected_train === 'Detached' ? 'selected' : ''; ?>>Detached</option> -->
                             <?php foreach ($trains as $train): ?>
                                 <option value="<?php echo e($train['train_info_id']); ?>" 
                                     <?php echo ((string)$selected_train === (string)$train['train_info_id']) ? 'selected' : ''; ?>>
