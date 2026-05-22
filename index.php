@@ -533,14 +533,14 @@ $warranty_claim_fsds = get_count($conn, "
             </div>
         </div>
 
-        <!-- <div class="dash-box danger">
+        <div class="dash-box info">
             <div class="dash-icon"><i class="bi bi-x-octagon"></i></div>
             <div class="dash-info">
-                <h6>Expired Inventory</h6>
-                <h3><?php echo number_format($expired_inventory); ?></h3>
-                <p>Expired items</p>
+                <h6> FDSS / FSDS</h6>
+                <h3>0</h3>
+                <p>FDSS: 0 | FSDS: 0</p>
             </div>
-        </div> -->
+        </div>
 
         <div class="dash-box success">
             <div class="dash-icon"><i class="bi bi-check-circle"></i></div>
