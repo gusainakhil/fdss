@@ -24,9 +24,15 @@ if ($train_info_id <= 0) {
 
 $message = '';
 $message_type = '';
+$unit_has_use_status = false;
 
 function e($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+}
+
+$use_status_check = $conn->query("SHOW COLUMNS FROM fdds_inventory_unit LIKE 'use_status'");
+if ($use_status_check && $use_status_check->num_rows > 0) {
+    $unit_has_use_status = true;
 }
 
 /*
@@ -130,11 +136,23 @@ $unit_query = "SELECT
                     AND ci.user_id = iu.user_id
                LEFT JOIN fdss_train_coach tc
                     ON tc.coach_id = ci.coach_id
-               WHERE iu.user_id = ?
+               WHERE iu.user_id = ?";
+
+if ($unit_has_use_status) {
+    $unit_query .= " AND (iu.use_status = 0 OR ci.coach_id = ?)";
+}
+
+$unit_query .= "
                ORDER BY im.item_name ASC, iu.unit_id DESC";
 
 $stmt = $conn->prepare($unit_query);
-$stmt->bind_param("i", $user_id);
+
+if ($unit_has_use_status) {
+    $stmt->bind_param("ii", $user_id, $coach['coach_id']);
+} else {
+    $stmt->bind_param("i", $user_id);
+}
+
 $stmt->execute();
 
 $unit_result = $stmt->get_result();
@@ -186,6 +204,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message_type = "danger";
             } else {
                 $unit_check_query = "SELECT unit_id FROM fdds_inventory_unit WHERE unit_id = ? AND user_id = ?";
+
+                if ($unit_has_use_status) {
+                    $unit_check_query .= " AND use_status = 0";
+                }
+
                 $unit_check_stmt = $conn->prepare($unit_check_query);
                 $unit_check_stmt->bind_param("ii", $inventory_unit_id, $user_id);
                 $unit_check_stmt->execute();
@@ -203,6 +226,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->bind_param("iiis", $coach['coach_id'], $inventory_unit_id, $user_id, $status);
 
                     if ($stmt->execute()) {
+                        if ($unit_has_use_status) {
+                            $use_update_query = "UPDATE fdds_inventory_unit SET use_status = 1 WHERE unit_id = ? AND user_id = ?";
+                            $use_update_stmt = $conn->prepare($use_update_query);
+                            $use_update_stmt->bind_param("ii", $inventory_unit_id, $user_id);
+                            $use_update_stmt->execute();
+                            $use_update_stmt->close();
+                        }
+
                         $message = "Inventory assigned successfully!";
                         $message_type = "success";
                     } else {
@@ -236,6 +267,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = "Please select an inventory unit.";
             $message_type = "danger";
         } else {
+            $current_unit_id = 0;
+            $current_query = "SELECT inventory_unit_id
+                              FROM fdss_coach_inventory
+                              WHERE id = ?
+                              AND coach_id = ?
+                              AND user_id = ?
+                              LIMIT 1";
+            $current_stmt = $conn->prepare($current_query);
+            $current_stmt->bind_param("iii", $coach_inventory_id, $coach['coach_id'], $user_id);
+            $current_stmt->execute();
+            $current_result = $current_stmt->get_result();
+
+            if ($current_row = $current_result->fetch_assoc()) {
+                $current_unit_id = (int) $current_row['inventory_unit_id'];
+            }
+
+            $current_stmt->close();
+
             $duplicate_query = "SELECT id
                                 FROM fdss_coach_inventory
                                 WHERE inventory_unit_id = ?
@@ -247,36 +296,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $duplicate_stmt->execute();
             $duplicate_result = $duplicate_stmt->get_result();
 
-            if ($duplicate_result->num_rows > 0) {
+            if ($current_unit_id <= 0) {
+                $message = "Inventory assignment not found.";
+                $message_type = "danger";
+            } elseif ($duplicate_result->num_rows > 0) {
                 $message = "This inventory unit is already assigned to a coach.";
                 $message_type = "danger";
             } else {
-                $update_query = "UPDATE fdss_coach_inventory SET
+                $can_update = true;
+
+                if ($unit_has_use_status && $inventory_unit_id !== $current_unit_id) {
+                    $unit_check_query = "SELECT unit_id
+                                         FROM fdds_inventory_unit
+                                         WHERE unit_id = ?
+                                         AND user_id = ?
+                                         AND use_status = 0
+                                         LIMIT 1";
+                    $unit_check_stmt = $conn->prepare($unit_check_query);
+                    $unit_check_stmt->bind_param("ii", $inventory_unit_id, $user_id);
+                    $unit_check_stmt->execute();
+                    $unit_check_result = $unit_check_stmt->get_result();
+
+                    if ($unit_check_result->num_rows === 0) {
+                        $message = "Selected inventory unit is already in use.";
+                        $message_type = "danger";
+                        $can_update = false;
+                        $unit_check_stmt->close();
+                    } else {
+                        $unit_check_stmt->close();
+                    }
+                }
+
+                if ($can_update) {
+                    $update_query = "UPDATE fdss_coach_inventory SET
                                     inventory_unit_id = ?,
                                     status = ?
                                  WHERE id = ?
                                  AND coach_id = ?
                                  AND user_id = ?";
 
-                $stmt = $conn->prepare($update_query);
-                $stmt->bind_param(
-                    "isiii",
-                    $inventory_unit_id,
-                    $status,
-                    $coach_inventory_id,
-                    $coach['coach_id'],
-                    $user_id
-                );
+                    $stmt = $conn->prepare($update_query);
+                    $stmt->bind_param(
+                        "isiii",
+                        $inventory_unit_id,
+                        $status,
+                        $coach_inventory_id,
+                        $coach['coach_id'],
+                        $user_id
+                    );
 
-                if ($stmt->execute()) {
-                    $message = "Inventory assignment updated successfully!";
-                    $message_type = "success";
-                } else {
-                    $message = "Error updating inventory.";
-                    $message_type = "danger";
+                    if ($stmt->execute()) {
+                        if ($unit_has_use_status && $inventory_unit_id !== $current_unit_id) {
+                            $release_query = "UPDATE fdds_inventory_unit SET use_status = 0 WHERE unit_id = ? AND user_id = ?";
+                            $release_stmt = $conn->prepare($release_query);
+                            $release_stmt->bind_param("ii", $current_unit_id, $user_id);
+                            $release_stmt->execute();
+                            $release_stmt->close();
+
+                            $use_update_query = "UPDATE fdds_inventory_unit SET use_status = 1 WHERE unit_id = ? AND user_id = ?";
+                            $use_update_stmt = $conn->prepare($use_update_query);
+                            $use_update_stmt->bind_param("ii", $inventory_unit_id, $user_id);
+                            $use_update_stmt->execute();
+                            $use_update_stmt->close();
+                        }
+
+                        $message = "Inventory assignment updated successfully!";
+                        $message_type = "success";
+                    } else {
+                        $message = "Error updating inventory.";
+                        $message_type = "danger";
+                    }
+
+                    $stmt->close();
                 }
-
-                $stmt->close();
             }
 
             $duplicate_stmt->close();
@@ -292,6 +384,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     elseif ($action === 'delete_inventory') {
 
         $coach_inventory_id = (int) ($_POST['coach_inventory_id'] ?? 0);
+        $deleted_unit_id = 0;
+
+        if ($unit_has_use_status) {
+            $deleted_unit_query = "SELECT inventory_unit_id
+                                   FROM fdss_coach_inventory
+                                   WHERE id = ?
+                                   AND coach_id = ?
+                                   AND user_id = ?
+                                   LIMIT 1";
+            $deleted_unit_stmt = $conn->prepare($deleted_unit_query);
+            $deleted_unit_stmt->bind_param("iii", $coach_inventory_id, $coach['coach_id'], $user_id);
+            $deleted_unit_stmt->execute();
+            $deleted_unit_result = $deleted_unit_stmt->get_result();
+
+            if ($deleted_unit_row = $deleted_unit_result->fetch_assoc()) {
+                $deleted_unit_id = (int) $deleted_unit_row['inventory_unit_id'];
+            }
+
+            $deleted_unit_stmt->close();
+        }
 
         $delete_query = "DELETE FROM fdss_coach_inventory
                          WHERE id = ?
@@ -303,6 +415,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->bind_param("iii", $coach_inventory_id, $coach['coach_id'], $user_id);
 
         if ($stmt->execute()) {
+            if ($unit_has_use_status && $deleted_unit_id > 0) {
+                $release_query = "UPDATE fdds_inventory_unit SET use_status = 0 WHERE unit_id = ? AND user_id = ?";
+                $release_stmt = $conn->prepare($release_query);
+                $release_stmt->bind_param("ii", $deleted_unit_id, $user_id);
+                $release_stmt->execute();
+                $release_stmt->close();
+            }
 
             $message = "Inventory deleted successfully!";
             $message_type = "success";
@@ -316,6 +435,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->close();
     }
 }
+
+/*
+|--------------------------------------------------------------------------
+| REFRESH AVAILABLE INVENTORY UNITS AFTER CHANGES
+|--------------------------------------------------------------------------
+*/
+
+$inventory_units = [];
+
+$unit_query = "SELECT
+                    iu.unit_id,
+                    iu.inventory_id,
+                    iu.serial_number,
+                    iu.model_number,
+                    iu.purchase_date,
+                    iu.Warranty_expire,
+                    iu.notes,
+                    im.item_name,
+                    m.company_name,
+                    ci.id AS assigned_id,
+                    tc.coach_no AS assigned_coach_no
+               FROM fdds_inventory_unit iu
+               INNER JOIN fdss_Inventory_Management im
+                    ON im.inventory_id = iu.inventory_id
+               LEFT JOIN fdss_manufacturers m
+                    ON m.manufacturer_id = iu.manufacturer_id
+               LEFT JOIN fdss_coach_inventory ci
+                    ON ci.inventory_unit_id = iu.unit_id
+                    AND ci.user_id = iu.user_id
+               LEFT JOIN fdss_train_coach tc
+                    ON tc.coach_id = ci.coach_id
+               WHERE iu.user_id = ?";
+
+if ($unit_has_use_status) {
+    $unit_query .= " AND (iu.use_status = 0 OR ci.coach_id = ?)";
+}
+
+$unit_query .= "
+               ORDER BY im.item_name ASC, iu.unit_id DESC";
+
+$stmt = $conn->prepare($unit_query);
+
+if ($unit_has_use_status) {
+    $stmt->bind_param("ii", $user_id, $coach['coach_id']);
+} else {
+    $stmt->bind_param("i", $user_id);
+}
+
+$stmt->execute();
+$unit_result = $stmt->get_result();
+
+while ($row = $unit_result->fetch_assoc()) {
+    $inventory_units[] = $row;
+}
+
+$stmt->close();
 
 /*
 |--------------------------------------------------------------------------
@@ -910,7 +1085,11 @@ function filterInventoryUnits(selectedUnitId = '') {
             return;
         }
 
-        option.hidden = option.dataset.inventoryId !== selectedInventoryId;
+        const belongsToSelectedItem = option.dataset.inventoryId === selectedInventoryId;
+        const isAssigned = option.dataset.assigned === '1';
+        const isCurrentEditUnit = selectedUnitId && option.value === String(selectedUnitId);
+
+        option.hidden = !belongsToSelectedItem || (isAssigned && !isCurrentEditUnit);
     });
 
     if (selectedUnitId) {

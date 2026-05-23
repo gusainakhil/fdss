@@ -38,6 +38,13 @@ if ($schedule_column_check && $schedule_column_check->num_rows > 0) {
     $schedule_uses_coach_id = true;
 }
 
+$schedule_has_inspection_type = false;
+$inspection_type_column_check = $conn->query("SHOW COLUMNS FROM fdss_coach_schedule LIKE 'Inspection_Type'");
+
+if ($inspection_type_column_check && $inspection_type_column_check->num_rows > 0) {
+    $schedule_has_inspection_type = true;
+}
+
 /*
 |--------------------------------------------------------------------------
 | CREATE SCHEDULE
@@ -56,8 +63,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             : null;
         $auditor_id = (int) ($_POST['auditor_id'] ?? 0);
         $assignment_date_time = trim($_POST['assignment_date_time'] ?? '');
-        $priority = $_POST['priority'] ?? 'Normal';
-        $special_remarks = trim($_POST['special_remarks'] ?? '');
+        $priority = 'Normal';
+        $special_remarks = '';
+        $inspection_type = $_POST['inspection_type'] ?? '1_month';
+        $inspection_day_map = [
+            '1_month' => 30,
+            '2_month' => 30,
+            '3_month' => 30,
+        ];
 
         if ($assignment_date_time !== '') {
             $assignment_date_time = str_replace('T', ' ', $assignment_date_time);
@@ -69,14 +82,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $last_inspection_date = null;
 
-        $next_due_date = !empty($_POST['next_due_date'])
-            ? $_POST['next_due_date']
-            : null;
+        $next_due_date = null;
+
+        if ($assignment_date_time !== '' && isset($inspection_day_map[$inspection_type])) {
+            $assignment_date = new DateTime(substr($assignment_date_time, 0, 10));
+            $assignment_date->modify('+' . $inspection_day_map[$inspection_type] . ' days');
+            $next_due_date = $assignment_date->format('Y-m-d');
+        }
 
         if (
             $coach_id <= 0 ||
             $auditor_id <= 0 ||
-            $assignment_date_time === ''
+            $assignment_date_time === '' ||
+            $next_due_date === null
         ) {
             $message = "Please fill all required fields.";
             $message_type = "danger";
@@ -123,6 +141,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
 
             $schedule_coach_column = $schedule_uses_coach_id ? 'coach_id' : 'coach_no';
+            $inspection_type_column = $schedule_has_inspection_type ? "\n                Inspection_Type," : '';
+            $inspection_type_placeholder = $schedule_has_inspection_type ? ', ?' : '';
 
             $insert_query = "INSERT INTO fdss_coach_schedule
             (
@@ -135,11 +155,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 assignment_date_time,
                 priority,
                 special_remarks,
+                $inspection_type_column
                 user_id
             )
             VALUES
             (
-                ?, ?, ?, ?, 'Assigned', ?, ?, ?, ?, ?
+                ?, ?, ?, ?, 'Assigned', ?, ?, ?, ?$inspection_type_placeholder, ?
             )";
 
             $stmt = $conn->prepare($insert_query);
@@ -149,7 +170,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message_type = "danger";
             } else {
 
-                if ($schedule_uses_coach_id) {
+                if ($schedule_uses_coach_id && $schedule_has_inspection_type) {
+                    $stmt->bind_param(
+                        "iississssi",
+                        $coach_id,
+                        $train_info_id,
+                        $last_inspection_date,
+                        $next_due_date,
+                        $auditor_id,
+                        $assignment_date_time,
+                        $priority,
+                        $special_remarks,
+                        $inspection_type,
+                        $user_id
+                    );
+                } elseif ($schedule_uses_coach_id) {
                     $stmt->bind_param(
                         "iississsi",
                         $coach_id,
@@ -160,6 +195,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $assignment_date_time,
                         $priority,
                         $special_remarks,
+                        $user_id
+                    );
+                } elseif ($schedule_has_inspection_type) {
+                    $stmt->bind_param(
+                        "sississssi",
+                        $coach_no_for_schedule,
+                        $train_info_id,
+                        $last_inspection_date,
+                        $next_due_date,
+                        $auditor_id,
+                        $assignment_date_time,
+                        $priority,
+                        $special_remarks,
+                        $inspection_type,
                         $user_id
                     );
                 } else {
@@ -231,6 +280,198 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->close();
             }
             }
+                }
+            }
+        }
+    }
+
+    if ($action === 'create_round_trip_schedule') {
+
+        $coach_id = (int) ($_POST['round_trip_coach_id'] ?? 0);
+        $round_trip_train_value = $_POST['round_trip_train_info_id'] ?? '';
+        $is_detached_round_trip = $round_trip_train_value === 'detached';
+        $train_info_id = (!$is_detached_round_trip && $round_trip_train_value !== '')
+            ? (int) $round_trip_train_value
+            : null;
+        $auditor_id = (int) ($_POST['round_trip_auditor_id'] ?? 0);
+        $assignment_date_time = trim($_POST['round_trip_assignment_date_time'] ?? '');
+        $priority = 'Normal';
+        $special_remarks = '';
+        $inspection_type = 'Round Trip';
+
+        if ($assignment_date_time !== '') {
+            $assignment_date_time = str_replace('T', ' ', $assignment_date_time);
+
+            if (strlen($assignment_date_time) === 16) {
+                $assignment_date_time .= ':00';
+            }
+        }
+
+        $last_inspection_date = null;
+        $next_due_date = $assignment_date_time !== ''
+            ? substr($assignment_date_time, 0, 10)
+            : null;
+
+        if (
+            $coach_id <= 0 ||
+            (!$is_detached_round_trip && $train_info_id === null) ||
+            $auditor_id <= 0 ||
+            $assignment_date_time === '' ||
+            $next_due_date === null
+        ) {
+            $message = "Please fill all round trip schedule fields.";
+            $message_type = "danger";
+        } else {
+
+            if ($is_detached_round_trip) {
+                $coach_query = "SELECT coach_id, coach_no
+                                FROM fdss_train_coach
+                                WHERE user_id = ?
+                                AND coach_id = ?
+                                AND status = 'Active'
+                                AND (train_info_id IS NULL OR train_info_id = '' OR coach_status = 'Detached')
+                                LIMIT 1";
+            } else {
+                $coach_query = "SELECT coach_id, coach_no
+                                FROM fdss_train_coach
+                                WHERE user_id = ?
+                                AND coach_id = ?
+                                AND train_info_id = ?
+                                AND status = 'Active'
+                                LIMIT 1";
+            }
+
+            $coach_stmt = $conn->prepare($coach_query);
+
+            if (!$coach_stmt) {
+                $message = "Round Trip Coach Check SQL Error: " . $conn->error;
+                $message_type = "danger";
+            } else {
+                if ($is_detached_round_trip) {
+                    $coach_stmt->bind_param(
+                        "ii",
+                        $user_id,
+                        $coach_id
+                    );
+                } else {
+                    $coach_stmt->bind_param(
+                        "iii",
+                        $user_id,
+                        $coach_id,
+                        $train_info_id
+                    );
+                }
+
+                $coach_stmt->execute();
+                $coach_result = $coach_stmt->get_result();
+
+                if ($coach_result->num_rows === 0) {
+                    $message = "Please select a valid active coach for the selected train.";
+                    $message_type = "danger";
+                    $coach_stmt->close();
+                } else {
+                    $coach = $coach_result->fetch_assoc();
+                    $coach_no_for_schedule = $coach['coach_no'];
+                    $coach_stmt->close();
+
+                    $schedule_coach_column = $schedule_uses_coach_id ? 'coach_id' : 'coach_no';
+                    $inspection_type_column = $schedule_has_inspection_type ? "\n                Inspection_Type," : '';
+                    $inspection_type_placeholder = $schedule_has_inspection_type ? ', ?' : '';
+
+                    $insert_query = "INSERT INTO fdss_coach_schedule
+                    (
+                        $schedule_coach_column,
+                        train_info_id,
+                        last_inspection_date,
+                        next_due_date,
+                        status,
+                        auditor_id,
+                        assignment_date_time,
+                        priority,
+                        special_remarks,
+                        $inspection_type_column
+                        user_id
+                    )
+                    VALUES
+                    (
+                        ?, ?, ?, ?, 'Assigned', ?, ?, ?, ?$inspection_type_placeholder, ?
+                    )";
+
+                    $stmt = $conn->prepare($insert_query);
+
+                    if (!$stmt) {
+                        $message = "Round Trip Schedule Insert SQL Error: " . $conn->error;
+                        $message_type = "danger";
+                    } else {
+                        if ($schedule_uses_coach_id && $schedule_has_inspection_type) {
+                            $stmt->bind_param(
+                                "iississssi",
+                                $coach_id,
+                                $train_info_id,
+                                $last_inspection_date,
+                                $next_due_date,
+                                $auditor_id,
+                                $assignment_date_time,
+                                $priority,
+                                $special_remarks,
+                                $inspection_type,
+                                $user_id
+                            );
+                        } elseif ($schedule_uses_coach_id) {
+                            $stmt->bind_param(
+                                "iississsi",
+                                $coach_id,
+                                $train_info_id,
+                                $last_inspection_date,
+                                $next_due_date,
+                                $auditor_id,
+                                $assignment_date_time,
+                                $priority,
+                                $special_remarks,
+                                $user_id
+                            );
+                        } elseif ($schedule_has_inspection_type) {
+                            $stmt->bind_param(
+                                "sississssi",
+                                $coach_no_for_schedule,
+                                $train_info_id,
+                                $last_inspection_date,
+                                $next_due_date,
+                                $auditor_id,
+                                $assignment_date_time,
+                                $priority,
+                                $special_remarks,
+                                $inspection_type,
+                                $user_id
+                            );
+                        } else {
+                            $stmt->bind_param(
+                                "sississsi",
+                                $coach_no_for_schedule,
+                                $train_info_id,
+                                $last_inspection_date,
+                                $next_due_date,
+                                $auditor_id,
+                                $assignment_date_time,
+                                $priority,
+                                $special_remarks,
+                                $user_id
+                            );
+                        }
+
+                        if ($stmt->execute()) {
+                            $_SESSION['flash_message'] = "Round Trip schedule created successfully!";
+                            $_SESSION['flash_type'] = "success";
+                            $stmt->close();
+
+                            header("Location: " . $_SERVER['PHP_SELF']);
+                            exit;
+                        }
+
+                        $message = "Error creating round trip schedule: " . $stmt->error;
+                        $message_type = "danger";
+                        $stmt->close();
+                    }
                 }
             }
         }
@@ -373,152 +614,144 @@ if ($stmt) {
     $message_type = "danger";
 }
 
-$calendar_events = [];
+if ($schedule_has_inspection_type && !empty($coaches)) {
+    foreach ($coaches as $index => $coach) {
+        $coaches[$index]['inspection_type_total'] = 0;
+        $coaches[$index]['inspection_type_counts'] = [];
+        $coaches[$index]['inspection_type_history'] = [];
 
-foreach ($coaches as $coach) {
-    $calendar_events[$coach['next_inspection_date']][] = [
-        'type' => 'due',
-        'data' => $coach,
-    ];
+        if ($schedule_uses_coach_id) {
+            $type_count_query = "SELECT Inspection_Type, COUNT(*) AS total
+                                 FROM fdss_coach_schedule
+                                 WHERE user_id = ?
+                                 AND coach_id = ?
+                                 AND Inspection_Type IS NOT NULL
+                                 AND Inspection_Type != ''
+                                 AND Inspection_Type != 'Round Trip'
+                                 GROUP BY Inspection_Type
+                                 ORDER BY total DESC, Inspection_Type ASC";
+        } else {
+            $type_count_query = "SELECT Inspection_Type, COUNT(*) AS total
+                                 FROM fdss_coach_schedule
+                                 WHERE user_id = ?
+                                 AND coach_no = ?
+                                 AND Inspection_Type IS NOT NULL
+                                 AND Inspection_Type != ''
+                                 AND Inspection_Type != 'Round Trip'
+                                 GROUP BY Inspection_Type
+                                 ORDER BY total DESC, Inspection_Type ASC";
+        }
+
+        $type_count_stmt = $conn->prepare($type_count_query);
+
+        if ($type_count_stmt) {
+            if ($schedule_uses_coach_id) {
+                $type_count_stmt->bind_param("ii", $user_id, $coach['coach_id']);
+            } else {
+                $type_count_stmt->bind_param("is", $user_id, $coach['coach_no']);
+            }
+
+            $type_count_stmt->execute();
+            $type_count_result = $type_count_stmt->get_result();
+
+            while ($type_row = $type_count_result->fetch_assoc()) {
+                $type_total = (int) $type_row['total'];
+                $coaches[$index]['inspection_type_total'] += $type_total;
+                $coaches[$index]['inspection_type_counts'][] = [
+                    'type' => $type_row['Inspection_Type'],
+                    'total' => $type_total,
+                ];
+            }
+
+            $type_count_stmt->close();
+        }
+
+        if ($schedule_uses_coach_id) {
+            $type_history_query = "SELECT Inspection_Type, assignment_date_time
+                                   FROM fdss_coach_schedule
+                                   WHERE user_id = ?
+                                   AND coach_id = ?
+                                   AND Inspection_Type IS NOT NULL
+                                   AND Inspection_Type != ''
+                                   AND Inspection_Type != 'Round Trip'
+                                   ORDER BY assignment_date_time DESC, schedule_id DESC
+                                   LIMIT 10";
+        } else {
+            $type_history_query = "SELECT Inspection_Type, assignment_date_time
+                                   FROM fdss_coach_schedule
+                                   WHERE user_id = ?
+                                   AND coach_no = ?
+                                   AND Inspection_Type IS NOT NULL
+                                   AND Inspection_Type != ''
+                                   AND Inspection_Type != 'Round Trip'
+                                   ORDER BY assignment_date_time DESC, schedule_id DESC
+                                   LIMIT 10";
+        }
+
+        $type_history_stmt = $conn->prepare($type_history_query);
+
+        if ($type_history_stmt) {
+            if ($schedule_uses_coach_id) {
+                $type_history_stmt->bind_param("ii", $user_id, $coach['coach_id']);
+            } else {
+                $type_history_stmt->bind_param("is", $user_id, $coach['coach_no']);
+            }
+
+            $type_history_stmt->execute();
+            $type_history_result = $type_history_stmt->get_result();
+
+            while ($history_row = $type_history_result->fetch_assoc()) {
+                $coaches[$index]['inspection_type_history'][] = $history_row;
+            }
+
+            $type_history_stmt->close();
+        }
+    }
 }
 
 /*
 |--------------------------------------------------------------------------
-| FETCH CREATED SCHEDULES FOR CALENDAR
+| FETCH ACTIVE COACHES FOR ROUND TRIP
 |--------------------------------------------------------------------------
 */
 
-if ($schedule_uses_coach_id) {
-    $scheduled_query = "SELECT
-                        s.schedule_id,
-                        s.coach_id,
-                        s.assignment_date_time,
-                        s.priority,
-                        s.status,
-                        u.user_name,
-                        u.full_name,
-                        c.coach_no,
-                        t.train_no,
-                        t.train_name
-                     FROM fdss_coach_schedule s
-                     LEFT JOIN fdss_train_coach c
-                        ON c.coach_id = s.coach_id
-                     LEFT JOIN fdss_users u
-                        ON u.user_id = s.auditor_id
-                     LEFT JOIN fdss_train_information t
-                        ON t.train_info_id = COALESCE(s.train_info_id, c.train_info_id)
-                     WHERE s.user_id = ?
-                     AND s.assignment_date_time IS NOT NULL";
+$round_trip_coaches = [];
 
-    if ($selected_train !== 'all') {
-        $scheduled_query .= " AND COALESCE(s.train_info_id, c.train_info_id) = ?";
-    }
+$round_trip_coach_query = "SELECT
+                            c.coach_id,
+                            c.coach_no,
+                            c.coach_type,
+                            c.train_info_id,
+                            c.coach_status
+                           FROM fdss_train_coach c
+                           LEFT JOIN fdss_train_information t
+                            ON t.train_info_id = c.train_info_id
+                           WHERE c.user_id = ?
+                           AND c.status = 'Active'
+                           AND (
+                            t.status = 'Active'
+                            OR c.train_info_id IS NULL
+                            OR c.train_info_id = ''
+                            OR c.coach_status = 'Detached'
+                           )
+                           ORDER BY c.coach_no ASC";
 
-    $scheduled_query .= " ORDER BY s.assignment_date_time ASC";
-} else {
-    $scheduled_query = "SELECT
-                        s.schedule_id,
-                        NULL AS coach_id,
-                        s.assignment_date_time,
-                        s.priority,
-                        s.status,
-                        u.user_name,
-                        u.full_name,
-                        s.coach_no,
-                        t.train_no,
-                        t.train_name
-                     FROM fdss_coach_schedule s
-                     LEFT JOIN fdss_users u
-                        ON u.user_id = s.auditor_id
-                     LEFT JOIN fdss_train_information t
-                        ON t.train_info_id = s.train_info_id
-                     WHERE s.user_id = ?
-                     AND s.assignment_date_time IS NOT NULL";
-
-    if ($selected_train !== 'all') {
-        $scheduled_query .= " AND s.train_info_id = ?";
-    }
-
-    $scheduled_query .= " ORDER BY s.assignment_date_time ASC";
-}
-
-$stmt = $conn->prepare($scheduled_query);
+$stmt = $conn->prepare($round_trip_coach_query);
 
 if ($stmt) {
-
-    if ($selected_train !== 'all') {
-        $selected_train_id = (int) $selected_train;
-        $stmt->bind_param("ii", $user_id, $selected_train_id);
-    } else {
-        $stmt->bind_param("i", $user_id);
-    }
-
+    $stmt->bind_param("i", $user_id);
     $stmt->execute();
 
-    $scheduled_result = $stmt->get_result();
+    $round_trip_coach_result = $stmt->get_result();
 
-    while ($row = $scheduled_result->fetch_assoc()) {
-        $event_date = date('Y-m-d', strtotime($row['assignment_date_time']));
-
-        $calendar_events[$event_date][] = [
-            'type' => 'scheduled',
-            'data' => $row,
-        ];
+    while ($row = $round_trip_coach_result->fetch_assoc()) {
+        $round_trip_coaches[] = $row;
     }
 
     $stmt->close();
-
 } else {
-    $message = "Scheduled Calendar SQL Error: " . $conn->error;
+    $message = "Round Trip Coach Fetch SQL Error: " . $conn->error;
     $message_type = "danger";
-}
-
-$calendar_month_map = [];
-
-foreach ($calendar_events as $event_date => $events) {
-    $month_key = date('Y-m', strtotime($event_date));
-    $calendar_month_map[$month_key] = new DateTime($month_key . '-01');
-}
-
-if (empty($calendar_month_map)) {
-    $calendar_month_map[date('Y-m')] = new DateTime(date('Y-m-01'));
-}
-
-ksort($calendar_month_map);
-$calendar_months = array_values($calendar_month_map);
-$calendar_event_payload = [];
-
-foreach ($calendar_events as $event_date => $events) {
-    foreach ($events as $event) {
-        if ($event['type'] === 'due') {
-            $coach = $event['data'];
-
-            $calendar_event_payload[$event_date][] = [
-                'type' => 'due',
-                'coach_id' => $coach['coach_id'],
-                'train_info_id' => $coach['train_info_id'] ?? '',
-                'coach_no' => $coach['coach_no'],
-                'train_no' => $coach['train_no'] ?: 'Detached',
-                'date' => $coach['next_inspection_date'],
-            ];
-        } else {
-            $schedule = $event['data'];
-
-            $calendar_event_payload[$event_date][] = [
-                'type' => 'scheduled',
-                'coach_no' => $schedule['coach_no'],
-                'train_no' => $schedule['train_no'] ?: 'Detached',
-                'auditor' => !empty($schedule['full_name'])
-                    ? $schedule['full_name']
-                    : $schedule['user_name'],
-                'time' => !empty($schedule['assignment_date_time'])
-                    ? date('h:i A', strtotime($schedule['assignment_date_time']))
-                    : '',
-                'priority' => $schedule['priority'],
-                'status' => $schedule['status'],
-            ];
-        }
-    }
 }
 
 ?>
@@ -546,229 +779,6 @@ foreach ($calendar_events as $event_date => $events) {
     <link href="assets/css/styles.css"
           rel="stylesheet">
 
-    <style>
-        .inspection-calendar {
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            background: #ffffff;
-            overflow-x: auto;
-        }
-
-        .calendar-title {
-            background: #61a2cb;
-            color: #ffffff;
-            font-size: .92rem;
-            font-weight: 700;
-            letter-spacing: 0;
-            padding: 9px 12px;
-            text-transform: uppercase;
-        }
-
-        .calendar-weekdays,
-        .calendar-grid {
-            min-width: 640px;
-            display: grid;
-            grid-template-columns: repeat(7, minmax(82px, 1fr));
-        }
-
-        .calendar-weekdays > div {
-            background: #f8fafc;
-            border-bottom: 1px solid #e5e7eb;
-            border-right: 1px solid #e5e7eb;
-            color: #475569;
-            font-size: .68rem;
-            font-weight: 700;
-            padding: 6px;
-            text-align: center;
-            text-transform: uppercase;
-        }
-
-        .calendar-weekdays > div:last-child {
-            border-right: 0;
-        }
-
-        .calendar-day {
-            border-bottom: 1px solid #e5e7eb;
-            border-right: 1px solid #e5e7eb;
-            min-height: 82px;
-            padding: 25px 5px 5px;
-            position: relative;
-        }
-
-        .calendar-day:nth-child(7n) {
-            border-right: 0;
-        }
-
-        .calendar-day.is-muted {
-            background: #f8fafc;
-            color: #cbd5e1;
-        }
-
-        .calendar-day.is-today {
-            background: #f0f9ff;
-        }
-
-        .calendar-date {
-            background: #e0f2fe;
-            border-bottom: 1px solid #bae6fd;
-            color: #075985;
-            font-size: .78rem;
-            font-weight: 700;
-            left: 0;
-            line-height: 20px;
-            padding-right: 7px;
-            position: absolute;
-            right: 0;
-            text-align: right;
-            top: 0;
-        }
-
-        .calendar-event {
-            background: #eef7fb;
-            border: 1px solid #c9e7f4;
-            border-radius: 6px;
-            color: #1e293b;
-            display: grid;
-            gap: 1px;
-            grid-template-columns: auto 1fr;
-            line-height: 1.2;
-            margin-bottom: 5px;
-            padding: 4px 5px;
-            text-align: left;
-            width: 100%;
-        }
-
-        .calendar-count {
-            align-items: center;
-            background: #eef7fb;
-            border: 1px solid #c9e7f4;
-            border-radius: 6px;
-            color: #075985;
-            display: flex;
-            font-size: .72rem;
-            font-weight: 700;
-            gap: 6px;
-            justify-content: center;
-            line-height: 1.2;
-            margin-top: 6px;
-            min-height: 36px;
-            padding: 6px;
-            text-align: center;
-            width: 100%;
-        }
-
-        .calendar-count:hover {
-            background: #dff1f8;
-            border-color: #61a2cb;
-            color: #075985;
-        }
-
-        .calendar-count .count-number {
-            font-size: 1rem;
-        }
-
-        .schedule-list-item {
-            align-items: center;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            display: flex;
-            gap: 12px;
-            justify-content: space-between;
-            padding: 10px 12px;
-        }
-
-        .schedule-list-item + .schedule-list-item {
-            margin-top: 10px;
-        }
-
-        .schedule-list-item.is-scheduled {
-            background: #f8fafc;
-        }
-
-        .schedule-list-title {
-            color: #1e293b;
-            font-size: .9rem;
-            font-weight: 700;
-        }
-
-        .schedule-list-meta {
-            color: #64748b;
-            font-size: .78rem;
-            margin-top: 2px;
-        }
-
-        .calendar-event:hover {
-            background: #dff1f8;
-            border-color: #61a2cb;
-        }
-
-        .calendar-event:hover .event-title,
-        .calendar-event:hover .event-meta {
-            color: #075985;
-            text-decoration: none;
-        }
-
-        .calendar-event.is-scheduled {
-            background: #f1f5f9;
-            border-color: #cbd5e1;
-            cursor: default;
-            opacity: .9;
-        }
-
-        .calendar-event.is-scheduled:hover {
-            background: #f1f5f9;
-            border-color: #cbd5e1;
-        }
-
-        .calendar-event.is-scheduled .event-time {
-            color: #64748b;
-        }
-
-        .calendar-event.is-scheduled .event-title,
-        .calendar-event.is-scheduled .event-meta,
-        .calendar-event.is-scheduled:hover .event-title,
-        .calendar-event.is-scheduled:hover .event-meta {
-            color: #475569;
-            text-decoration: none;
-        }
-
-        .event-time {
-            color: #0f759b;
-            font-size: .62rem;
-            font-weight: 700;
-            padding-right: 5px;
-        }
-
-        .event-title {
-            font-size: .68rem;
-            font-weight: 700;
-            min-width: 0;
-            overflow-wrap: anywhere;
-        }
-
-        .event-meta {
-            color: #64748b;
-            font-size: .62rem;
-            grid-column: 2;
-            overflow-wrap: anywhere;
-        }
-
-        @media (max-width: 767.98px) {
-            .calendar-title {
-                font-size: .84rem;
-            }
-
-            .calendar-weekdays,
-            .calendar-grid {
-                min-width: 600px;
-            }
-
-            .calendar-day {
-                min-height: 78px;
-            }
-        }
-    </style>
-
 </head>
 
 <body>
@@ -794,6 +804,16 @@ foreach ($calendar_events as $event_date => $events) {
             </p>
 
         </div>
+
+        <button type="button"
+                class="btn btn-primary"
+                data-bs-toggle="modal"
+                data-bs-target="#roundTripScheduleModal">
+
+            <i class="bi bi-arrow-repeat"></i>
+            Round Trip Schedule
+
+        </button>
 
     </div>
 
@@ -880,7 +900,7 @@ foreach ($calendar_events as $event_date => $events) {
 
     <div class="row">
 
-        <div class="col-12">
+        <div class="col-lg-12">
 
             <div class="content-card">
 
@@ -890,7 +910,7 @@ foreach ($calendar_events as $event_date => $events) {
 
                         <i class="bi bi-calendar-check"></i>
 
-                        Inspection Schedule Calendar
+                        Upcoming Inspection Due Coaches
 
                         <small class="text-muted">
                             (Overdue to <?php echo e($selected_date); ?>)
@@ -902,159 +922,182 @@ foreach ($calendar_events as $event_date => $events) {
 
                 <div class="card-body">
 
-                    <?php if (empty($calendar_events)): ?>
+                    <div class="table-wrapper">
 
-                        <div class="text-center text-muted py-4">
-                            No due or scheduled inspections found.
-                        </div>
+                        <table class="table table-hover">
 
-                    <?php else: ?>
+                            <thead>
 
-                        <?php foreach ($calendar_months as $calendar_month): ?>
+                            <tr>
 
-                            <?php
-                            $month_start = new DateTime($calendar_month->format('Y-m-01'));
-                            $month_end = new DateTime($calendar_month->format('Y-m-t'));
-                            $grid_start = clone $month_start;
-                            $grid_start->modify('-' . ((int)$grid_start->format('N') - 1) . ' days');
-                            $grid_end = clone $month_end;
-                            $grid_end->modify('+' . (7 - (int)$grid_end->format('N')) . ' days');
-                            $day_cursor = clone $grid_start;
-                            ?>
+                                <th>Due Date</th>
+                                <th>Coach No.</th>
+                                <th>Train</th>
+                                <th>Coach Type</th>
+                                <th>Inspection Type Count</th>
+                                <th>Action</th>
 
-                            <div class="inspection-calendar mb-4">
+                            </tr>
 
-                                <div class="calendar-title">
-                                    <?php echo e($calendar_month->format('F Y')); ?>
-                                </div>
+                            </thead>
 
-                                <div class="calendar-weekdays">
-                                    <div>Mon</div>
-                                    <div>Tue</div>
-                                    <div>Wed</div>
-                                    <div>Thu</div>
-                                    <div>Fri</div>
-                                    <div>Sat</div>
-                                    <div>Sun</div>
-                                </div>
+                            <tbody>
 
-                                <div class="calendar-grid">
+                            <?php if (empty($coaches)): ?>
 
-                                    <?php while ($day_cursor <= $grid_end): ?>
+                                <tr>
 
-                                        <?php
-                                        $date_key = $day_cursor->format('Y-m-d');
-                                        $is_current_month = $day_cursor->format('m') === $calendar_month->format('m');
-                                        $day_events = $calendar_events[$date_key] ?? [];
-                                        ?>
+                                    <td colspan="6"
+                                        class="text-center text-muted py-4">
 
-                                        <div class="calendar-day <?php echo $is_current_month ? '' : 'is-muted'; ?> <?php echo $date_key === $today ? 'is-today' : ''; ?>">
+                                        No overdue coaches or coaches due within next 3 days.
 
-                                            <div class="calendar-date">
-                                                <?php echo e($day_cursor->format('j')); ?>
-                                            </div>
+                                    </td>
 
-                                            <?php if (!empty($day_events)): ?>
+                                </tr>
 
-                                                <?php
-                                                $due_count = 0;
-                                                $scheduled_count = 0;
+                            <?php else: ?>
 
-                                                foreach ($day_events as $event) {
-                                                    if ($event['type'] === 'due') {
-                                                        $due_count++;
-                                                    } else {
-                                                        $scheduled_count++;
-                                                    }
-                                                }
-                                                ?>
+                                <?php foreach ($coaches as $coach): ?>
 
-                                                <button
-                                                    type="button"
-                                                    class="calendar-count"
-                                                    onclick="openDateSchedules('<?php echo e($date_key); ?>')"
-                                                    data-bs-toggle="modal"
-                                                    data-bs-target="#dateSchedulesModal">
+                                    <tr>
 
-                                                    <span class="count-number">
-                                                        <?php echo count($day_events); ?>
-                                                    </span>
+                                        <td>
 
-                                                    <span>
-                                                        Schedules
-                                                        <br>
-                                                        <small>
-                                                            <?php echo $due_count; ?> Due / <?php echo $scheduled_count; ?> Set
-                                                        </small>
-                                                    </span>
+                                            <strong>
 
-                                                </button>
+                                                <?php echo date('d M Y', strtotime($coach['next_inspection_date'])); ?>
+
+                                            </strong>
+
+                                        </td>
+
+                                        <td>
+
+                                            <strong>
+
+                                                <?php echo e($coach['coach_no']); ?>
+
+                                            </strong>
+
+                                        </td>
+
+                                        <td>
+
+                                            <strong>
+
+                                                <?php echo e($coach['train_no'] ?: 'Detached'); ?>
+
+                                            </strong>
+
+                                            <br>
+
+                                            <?php echo e($coach['train_name'] ?: '-'); ?>
+
+                                        </td>
+
+                                        <td>
+
+                                            <?php echo e($coach['coach_type']); ?>
+
+                                        </td>
+
+                                        <td>
+
+                                            <?php if (!$schedule_has_inspection_type): ?>
+
+                                                <span class="text-muted">-</span>
+
+                                            <?php elseif (empty($coach['inspection_type_total'])): ?>
+
+                                                <span class="text-muted">
+                                                    No non-Round Trip inspections
+                                                </span>
+
+                                            <?php else: ?>
+
+                                                <div class="fw-semibold mb-1">
+                                                    Total:
+                                                    <?php echo e($coach['inspection_type_total']); ?>
+                                                </div>
+
+                                                <div class="d-flex flex-wrap gap-1 mb-2">
+
+                                                    <?php foreach ($coach['inspection_type_counts'] as $type_count): ?>
+
+                                                        <span class="badge bg-info text-dark">
+                                                            <?php echo e($type_count['type']); ?>:
+                                                            <?php echo e($type_count['total']); ?>
+                                                        </span>
+
+                                                    <?php endforeach; ?>
+
+                                                </div>
+
+                                                <div class="small text-muted">
+                                                    Latest 10
+                                                </div>
+
+                                                <?php foreach ($coach['inspection_type_history'] as $history): ?>
+
+                                                    <div class="small">
+                                                        <?php echo e($history['Inspection_Type']); ?>
+                                                        <span class="text-muted">
+                                                            <?php
+                                                            echo !empty($history['assignment_date_time'])
+                                                                ? date('d M Y', strtotime($history['assignment_date_time']))
+                                                                : '-';
+                                                            ?>
+                                                        </span>
+                                                    </div>
+
+                                                <?php endforeach; ?>
 
                                             <?php endif; ?>
 
-                                        </div>
+                                        </td>
 
-                                        <?php $day_cursor->modify('+1 day'); ?>
+                                        <td>
 
-                                    <?php endwhile; ?>
+                                            <button
+                                                type="button"
+                                                class="btn btn-sm btn-primary"
+	                                                onclick="openScheduleModal(
+                                                    '<?php echo e($coach['coach_id']); ?>',
+	                                                    '<?php echo e($coach['train_info_id']); ?>',
+	                                                    '<?php echo e($coach['coach_no']); ?>',
+	                                                    '<?php echo e($coach['next_inspection_date']); ?>'
+                                                )"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#scheduleModal">
 
-                                </div>
+                                                Assign Auditor
 
-                            </div>
+                                            </button>
 
-                        <?php endforeach; ?>
+                                        </td>
 
-                    <?php endif; ?>
+                                    </tr>
+
+                                <?php endforeach; ?>
+
+                            <?php endif; ?>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
 
                 </div>
 
             </div>
 
         </div>
+
     </div>
 
 </main>
-
-</div>
-
-<div class="modal fade"
-     id="dateSchedulesModal"
-     tabindex="-1">
-
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-
-        <div class="modal-content border-0 shadow-lg">
-
-            <div class="modal-header text-white" style="background-color: #61a2cb;">
-
-                <div>
-
-                    <h5 class="modal-title mb-1">
-                        <i class="bi bi-list-check me-2"></i>
-                        Date Schedules
-                    </h5>
-
-                    <small class="opacity-75"
-                           id="dateSchedulesTitle">
-                    </small>
-
-                </div>
-
-                <button type="button"
-                        class="btn-close btn-close-white"
-                        data-bs-dismiss="modal"></button>
-
-            </div>
-
-            <div class="modal-body p-4">
-
-                <div id="dateSchedulesList"></div>
-
-            </div>
-
-        </div>
-
-    </div>
 
 </div>
 
@@ -1072,11 +1115,11 @@ foreach ($calendar_events as $event_date => $events) {
 
                     <h5 class="modal-title mb-1">
                         <i class="bi bi-calendar-check me-2"></i>
-                        Create Inspection Schedule
+                        Assign Auditor
                     </h5>
 
                     <small class="opacity-75">
-                        Assign auditor and create inspection task
+                        Assign auditor and set next inspection cycle
                     </small>
 
                 </div>
@@ -1132,6 +1175,7 @@ foreach ($calendar_events as $event_date => $events) {
 	                                           class="form-control fw-bold text-danger"
 	                                           id="nextDueDate"
 	                                           name="next_due_date"
+                                               readonly
 	                                           required>
 
                                 </div>
@@ -1196,37 +1240,30 @@ foreach ($calendar_events as $event_date => $events) {
 
                     <div class="row g-3 mt-1">
 
-                        <div class="col-md-4">
+                        <div class="col-md-6">
 
                             <label class="form-label fw-semibold">
-                                Priority
+                                Inspection Type
                             </label>
 
                             <select class="form-select"
-                                    name="priority">
+                                    name="inspection_type"
+                                    id="inspectionType"
+                                    required>
 
-                                <option value="Normal">
-                                    Normal Priority
+                                <option value="1_month">
+                                    1 Month Inspection
                                 </option>
 
-                                <option value="High">
-                                    High Priority
+                                <option value="2_month">
+                                    2 Month Inspection
+                                </option>
+
+                                <option value="3_month">
+                                    3 Month Inspection
                                 </option>
 
                             </select>
-
-                        </div>
-
-                        <div class="col-md-8">
-
-                            <label class="form-label fw-semibold">
-                                Special Remarks
-                            </label>
-
-                            <textarea class="form-control"
-                                      name="special_remarks"
-                                      rows="3"
-                                      placeholder="Write inspection instructions, emergency notes, special tasks etc..."></textarea>
 
                         </div>
 
@@ -1246,9 +1283,8 @@ foreach ($calendar_events as $event_date => $events) {
 
                                 <div class="small mt-1">
 
-                                    After creating this schedule,
-                                    the assigned auditor will perform inspection
-                                    for the selected coach before the due date.
+                                    Next Inspection Date will be calculated from Assignment Date & Time
+                                    based on selected inspection type.
 
                                 </div>
 
@@ -1275,7 +1311,213 @@ foreach ($calendar_events as $event_date => $events) {
 
                         <i class="bi bi-check-circle me-1"></i>
 
-                        Create Schedule
+                        Assign Auditor
+
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+<div class="modal fade"
+     id="roundTripScheduleModal"
+     tabindex="-1">
+
+    <div class="modal-dialog modal-lg">
+
+        <div class="modal-content border-0 shadow-lg">
+
+            <div class="modal-header text-white" style="background-color: #61a2cb;">
+
+                <div>
+
+                    <h5 class="modal-title mb-1">
+                        <i class="bi bi-arrow-repeat me-2"></i>
+                        Round Trip Schedule
+                    </h5>
+
+                    <small class="opacity-75">
+                        Assign auditor for round trip inspection
+                    </small>
+
+                </div>
+
+                <button type="button"
+                        class="btn-close btn-close-white"
+                        data-bs-dismiss="modal"></button>
+
+            </div>
+
+            <form method="POST">
+
+                <input type="hidden"
+                       name="action"
+                       value="create_round_trip_schedule">
+
+                <div class="modal-body p-4">
+
+                    <div class="row g-3">
+
+                        <div class="col-md-6">
+
+                            <label class="form-label fw-semibold">
+                                Train
+                            </label>
+
+                            <select class="form-select"
+                                    name="round_trip_train_info_id"
+                                    id="roundTripTrain"
+                                    required>
+
+                                <option value="">
+                                    Choose Train
+                                </option>
+
+                                <option value="detached">
+                                    Detached
+                                </option>
+
+                                <?php foreach ($trains as $train): ?>
+
+                                    <option value="<?php echo e($train['train_info_id']); ?>">
+                                        <?php echo e($train['train_no']); ?>
+                                        -
+                                        <?php echo e($train['train_name']); ?>
+                                    </option>
+
+                                <?php endforeach; ?>
+
+                            </select>
+
+                        </div>
+
+                        <div class="col-md-6">
+
+                            <label class="form-label fw-semibold">
+                                Coach
+                            </label>
+
+                            <select class="form-select"
+                                    name="round_trip_coach_id"
+                                    id="roundTripCoach"
+                                    required>
+
+                                <option value="">
+                                    Choose Coach
+                                </option>
+
+                                <?php foreach ($round_trip_coaches as $coach): ?>
+
+                                    <?php
+                                    $round_trip_train_id = (
+                                        empty($coach['train_info_id']) ||
+                                        $coach['coach_status'] === 'Detached'
+                                    )
+                                        ? 'detached'
+                                        : $coach['train_info_id'];
+                                    ?>
+
+                                    <option value="<?php echo e($coach['coach_id']); ?>"
+                                            data-train-id="<?php echo e($round_trip_train_id); ?>">
+                                        <?php echo e($coach['coach_no']); ?>
+                                        <?php if (!empty($coach['coach_type'])): ?>
+                                            -
+                                            <?php echo e($coach['coach_type']); ?>
+                                        <?php endif; ?>
+                                    </option>
+
+                                <?php endforeach; ?>
+
+                            </select>
+
+                        </div>
+
+                        <div class="col-md-6">
+
+                            <label class="form-label fw-semibold">
+                                Select Auditor
+                            </label>
+
+                            <select class="form-select"
+                                    name="round_trip_auditor_id"
+                                    required>
+
+                                <option value="">
+                                    Choose Auditor
+                                </option>
+
+                                <?php foreach ($auditors as $auditor): ?>
+
+                                    <option value="<?php echo e($auditor['user_id']); ?>">
+
+                                        <?php
+                                        echo e(
+                                            !empty($auditor['full_name'])
+                                            ? $auditor['full_name']
+                                            : $auditor['user_name']
+                                        );
+                                        ?>
+
+                                    </option>
+
+                                <?php endforeach; ?>
+
+                            </select>
+
+                        </div>
+
+                        <div class="col-md-6">
+
+                            <label class="form-label fw-semibold">
+                                Assignment Date & Time
+                            </label>
+
+                            <input type="datetime-local"
+                                   class="form-control"
+                                   name="round_trip_assignment_date_time"
+                                   required>
+
+                        </div>
+
+                        <div class="col-md-6">
+
+                            <label class="form-label fw-semibold">
+                                Inspection Type
+                            </label>
+
+                            <input type="text"
+                                   class="form-control fw-bold"
+                                   name="round_trip_inspection_type"
+                                   value="Round Trip"
+                                   readonly>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="modal-footer bg-light">
+
+                    <button type="button"
+                            class="btn btn-outline-secondary"
+                            data-bs-dismiss="modal">
+
+                        Cancel
+
+                    </button>
+
+                    <button type="submit"
+                            class="btn btn-primary px-4">
+
+                        <i class="bi bi-check-circle me-1"></i>
+                        Create Round Trip Schedule
 
                     </button>
 
@@ -1297,95 +1539,6 @@ foreach ($calendar_events as $event_date => $events) {
 
 <script>
 
-const calendarEvents = <?php echo json_encode($calendar_event_payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
-
-function escapeHtml(value) {
-    return String(value ?? '').replace(/[&<>"']/g, function (char) {
-        return {
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#039;'
-        }[char];
-    });
-}
-
-function openDateSchedules(dateKey) {
-    const events = calendarEvents[dateKey] || [];
-    const title = document.getElementById('dateSchedulesTitle');
-    const list = document.getElementById('dateSchedulesList');
-    const formattedDate = new Date(dateKey + 'T00:00:00').toLocaleDateString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
-    });
-
-    title.textContent = formattedDate + ' - ' + events.length + ' schedule(s)';
-
-    if (!events.length) {
-        list.innerHTML = '<div class="text-center text-muted py-4">No schedules found.</div>';
-        return;
-    }
-
-    list.innerHTML = events.map(function (event, index) {
-        if (event.type === 'due') {
-            return `
-                <div class="schedule-list-item">
-                    <div>
-                        <div class="schedule-list-title">${escapeHtml(event.coach_no)}</div>
-                        <div class="schedule-list-meta">${escapeHtml(event.train_no)} &middot; Due for scheduling</div>
-                    </div>
-                    <button type="button"
-                            class="btn btn-sm btn-primary js-create-schedule"
-                            data-event-index="${index}">
-                        Create
-                    </button>
-                </div>
-            `;
-        }
-
-        return `
-            <div class="schedule-list-item is-scheduled">
-                <div>
-                    <div class="schedule-list-title">${escapeHtml(event.coach_no)}</div>
-                    <div class="schedule-list-meta">
-                        ${escapeHtml(event.train_no)}
-                        ${event.time ? '&middot; ' + escapeHtml(event.time) : ''}
-                        ${event.auditor ? '&middot; ' + escapeHtml(event.auditor) : ''}
-                    </div>
-                </div>
-                <span class="badge bg-secondary">${escapeHtml(event.status || 'Scheduled')}</span>
-            </div>
-        `;
-    }).join('');
-
-    list.querySelectorAll('.js-create-schedule').forEach(function (button) {
-        button.addEventListener('click', function () {
-            const event = events[Number(button.dataset.eventIndex)];
-            selectDueSchedule(event);
-        });
-    });
-}
-
-function selectDueSchedule(event) {
-    const dateSchedulesModalElement = document.getElementById('dateSchedulesModal');
-    const dateSchedulesModal = bootstrap.Modal.getInstance(dateSchedulesModalElement);
-    const showScheduleModal = function () {
-        openScheduleModal(event.coach_id, event.train_info_id, event.coach_no, event.date);
-
-        const scheduleModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('scheduleModal'));
-        scheduleModal.show();
-    };
-
-    if (dateSchedulesModal) {
-        dateSchedulesModalElement.addEventListener('hidden.bs.modal', showScheduleModal, { once: true });
-        dateSchedulesModal.hide();
-    } else {
-        showScheduleModal();
-    }
-}
-
 function openScheduleModal(coachId, trainInfoId, coachNo, nextDueDate) {
     document.getElementById('coachId').value = coachId;
     document.getElementById('trainInfoId').value = trainInfoId;
@@ -1393,15 +1546,83 @@ function openScheduleModal(coachId, trainInfoId, coachNo, nextDueDate) {
 
     const assignmentDateTime = document.getElementById('assignmentDateTime');
     const nextDueDateInput = document.getElementById('nextDueDate');
-    const dueDate = new Date(nextDueDate + 'T10:00:00');
-    const futureDate = new Date(dueDate);
-
-    futureDate.setDate(futureDate.getDate() + 1);
+    const inspectionType = document.getElementById('inspectionType');
 
     assignmentDateTime.value = nextDueDate + 'T10:00';
-    nextDueDateInput.min = futureDate.toISOString().slice(0, 10);
-    nextDueDateInput.value = '';
+    inspectionType.value = '1_month';
+    updateNextInspectionDate();
 }
+
+function updateNextInspectionDate() {
+    const assignmentDateTime = document.getElementById('assignmentDateTime');
+    const nextDueDateInput = document.getElementById('nextDueDate');
+    const inspectionType = document.getElementById('inspectionType');
+    const dayMap = {
+        '1_month': 30,
+        '2_month': 30,
+        '3_month': 30,
+    };
+
+    if (!assignmentDateTime.value) {
+        nextDueDateInput.value = '';
+        return;
+    }
+
+    const nextDate = new Date(assignmentDateTime.value);
+    nextDate.setDate(nextDate.getDate() + (dayMap[inspectionType.value] || 30));
+    nextDueDateInput.value = formatLocalDate(nextDate);
+}
+
+function formatLocalDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+}
+
+document.getElementById('assignmentDateTime')
+    .addEventListener('change', updateNextInspectionDate);
+
+document.getElementById('inspectionType')
+    .addEventListener('change', updateNextInspectionDate);
+
+function filterRoundTripCoaches() {
+    const trainSelect = document.getElementById('roundTripTrain');
+    const coachSelect = document.getElementById('roundTripCoach');
+
+    if (!trainSelect || !coachSelect) {
+        return;
+    }
+
+    const selectedTrainId = trainSelect.value;
+
+    Array.from(coachSelect.options).forEach((option) => {
+        if (!option.value) {
+            option.hidden = false;
+            option.disabled = false;
+            return;
+        }
+
+        const shouldHide = selectedTrainId === '' || option.dataset.trainId !== selectedTrainId;
+
+        option.hidden = shouldHide;
+        option.disabled = shouldHide;
+    });
+
+    if (
+        coachSelect.selectedOptions.length &&
+        coachSelect.selectedOptions[0].hidden
+    ) {
+        coachSelect.value = '';
+    }
+}
+
+document.getElementById('roundTripTrain')
+    .addEventListener('change', filterRoundTripCoaches);
+
+document.getElementById('roundTripScheduleModal')
+    .addEventListener('shown.bs.modal', filterRoundTripCoaches);
 
 </script>
 

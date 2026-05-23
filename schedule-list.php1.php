@@ -83,6 +83,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $assignment_date_time = trim($_POST['assignment_date_time'] ?? '');
 
+        $priority = $_POST['priority'] ?? 'Normal';
+
+        $special_remarks = trim($_POST['special_remarks'] ?? '');
+
         $status = $_POST['status'] ?? 'Assigned';
 
         if (
@@ -156,6 +160,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 auditor_id = ?,
                 assignment_date_time = ?,
+                priority = ?,
+                special_remarks = ?,
                 status = ?
 
                 WHERE schedule_id = ?
@@ -167,9 +173,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($stmt) {
 
                 $stmt->bind_param(
-                    "issii",
+                    "issssii",
                     $auditor_id,
                     $assignment_date_time,
+                    $priority,
+                    $special_remarks,
                     $status,
                     $schedule_id,
                     $user_id
@@ -389,8 +397,11 @@ if ($schedule_uses_coach_id) {
                 $coach_no_select,
                 COALESCE(s.train_info_id, c.train_info_id) AS train_info_id,
                 s.last_inspection_date,
+                s.next_due_date,
                 s.status,
                 s.assignment_date_time,
+                s.priority,
+                s.special_remarks,
 
                 u.user_name,
                 u.full_name,
@@ -422,8 +433,11 @@ if ($schedule_uses_coach_id) {
                 s.coach_no,
                 s.train_info_id,
                 s.last_inspection_date,
+                s.next_due_date,
                 s.status,
                 s.assignment_date_time,
+                s.priority,
+                s.special_remarks,
 
                 u.user_name,
                 u.full_name,
@@ -477,99 +491,6 @@ if ($stmt) {
     $message_type = "danger";
 }
 
-$calendar_schedules = [];
-$calendar_events = [];
-$calendar_month_map = [];
-
-if ($schedule_uses_coach_id) {
-    $calendar_coach_select = $schedule_uses_coach_no
-        ? "COALESCE(c.coach_no, s.coach_no) AS coach_no"
-        : "c.coach_no";
-
-    $calendar_query = "SELECT
-                            s.schedule_id,
-                            s.status,
-                            s.assignment_date_time,
-                            s.train_info_id,
-                            $calendar_coach_select,
-                            u.user_name,
-                            u.full_name,
-                            u.user_id AS auditor_user_id,
-                            t.train_no,
-                            t.train_name
-                       FROM fdss_coach_schedule s
-                       LEFT JOIN fdss_train_coach c
-                            ON c.coach_id = s.coach_id
-                            AND c.user_id = s.user_id
-                       LEFT JOIN fdss_users u
-                            ON u.user_id = s.auditor_id
-                       LEFT JOIN fdss_train_information t
-                            ON t.train_info_id = COALESCE(s.train_info_id, c.train_info_id)
-                       WHERE s.user_id = ?
-                       ORDER BY s.assignment_date_time ASC, s.schedule_id ASC";
-} else {
-    $calendar_query = "SELECT
-                            s.schedule_id,
-                            s.status,
-                            s.assignment_date_time,
-                            s.train_info_id,
-                            s.coach_no,
-                            u.user_name,
-                            u.full_name,
-                            u.user_id AS auditor_user_id,
-                            t.train_no,
-                            t.train_name
-                       FROM fdss_coach_schedule s
-                       LEFT JOIN fdss_users u
-                            ON u.user_id = s.auditor_id
-                       LEFT JOIN fdss_train_information t
-                            ON t.train_info_id = s.train_info_id
-                       WHERE s.user_id = ?
-                       ORDER BY s.assignment_date_time ASC, s.schedule_id ASC";
-}
-
-$calendar_stmt = $conn->prepare($calendar_query);
-
-if ($calendar_stmt) {
-    $calendar_stmt->bind_param("i", $user_id);
-    $calendar_stmt->execute();
-    $calendar_result = $calendar_stmt->get_result();
-
-    while ($row = $calendar_result->fetch_assoc()) {
-        $calendar_schedules[] = $row;
-
-        if (!empty($row['assignment_date_time'])) {
-            $date_key = date('Y-m-d', strtotime($row['assignment_date_time']));
-            $calendar_events[$date_key][] = $row;
-            $calendar_month_map[date('Y-m', strtotime($row['assignment_date_time']))] = new DateTime(date('Y-m-01', strtotime($row['assignment_date_time'])));
-        }
-    }
-
-    $calendar_stmt->close();
-}
-
-if (empty($calendar_month_map)) {
-    $calendar_month_map[date('Y-m')] = new DateTime(date('Y-m-01'));
-}
-
-ksort($calendar_month_map);
-$calendar_months = array_values($calendar_month_map);
-$calendar_event_payload = [];
-
-foreach ($calendar_events as $event_date => $events) {
-    foreach ($events as $event) {
-        $calendar_event_payload[$event_date][] = [
-            'schedule_id' => (int) $event['schedule_id'],
-            'coach_no' => $event['coach_no'],
-            'train' => trim(($event['train_no'] ?? '') . (!empty($event['train_name']) ? ' - ' . $event['train_name'] : '')),
-            'auditor' => !empty($event['full_name']) ? $event['full_name'] : $event['user_name'],
-            'auditor_id' => (int) ($event['auditor_user_id'] ?? 0),
-            'assignment_date_time' => $event['assignment_date_time'],
-            'status' => $event['status'],
-        ];
-    }
-}
-
 ?>
 
 <!DOCTYPE html>
@@ -594,119 +515,6 @@ foreach ($calendar_events as $event_date => $events) {
 
     <link href="assets/css/styles.css"
           rel="stylesheet">
-
-    <style>
-        .inspection-calendar {
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            background: #ffffff;
-            overflow-x: auto;
-        }
-        .calendar-title {
-            background: #61a2cb;
-            color: #ffffff;
-            font-size: .92rem;
-            font-weight: 700;
-            padding: 9px 12px;
-            text-transform: uppercase;
-        }
-        .calendar-weekdays,
-        .calendar-grid {
-            min-width: 640px;
-            display: grid;
-            grid-template-columns: repeat(7, minmax(82px, 1fr));
-        }
-        .calendar-weekdays > div {
-            background: #f8fafc;
-            border-bottom: 1px solid #e5e7eb;
-            border-right: 1px solid #e5e7eb;
-            color: #475569;
-            font-size: .68rem;
-            font-weight: 700;
-            padding: 6px;
-            text-align: center;
-            text-transform: uppercase;
-        }
-        .calendar-day {
-            border-bottom: 1px solid #e5e7eb;
-            border-right: 1px solid #e5e7eb;
-            min-height: 82px;
-            padding: 25px 5px 5px;
-            position: relative;
-        }
-        .calendar-day:nth-child(7n),
-        .calendar-weekdays > div:last-child {
-            border-right: 0;
-        }
-        .calendar-day.is-muted {
-            background: #f8fafc;
-            color: #cbd5e1;
-        }
-        .calendar-day.is-today {
-            background: #f0f9ff;
-        }
-        .calendar-date {
-            background: #e0f2fe;
-            border-bottom: 1px solid #bae6fd;
-            color: #075985;
-            font-size: .78rem;
-            font-weight: 700;
-            left: 0;
-            line-height: 20px;
-            padding-right: 7px;
-            position: absolute;
-            right: 0;
-            text-align: right;
-            top: 0;
-        }
-        .calendar-count {
-            align-items: center;
-            background: #eef7fb;
-            border: 1px solid #c9e7f4;
-            border-radius: 6px;
-            color: #075985;
-            display: flex;
-            font-size: .72rem;
-            font-weight: 700;
-            gap: 6px;
-            justify-content: center;
-            line-height: 1.2;
-            margin-top: 6px;
-            min-height: 38px;
-            padding: 6px;
-            text-align: center;
-            width: 100%;
-        }
-        .calendar-count:hover {
-            background: #dff1f8;
-            border-color: #61a2cb;
-        }
-        .calendar-count .count-number {
-            font-size: 1rem;
-        }
-        .schedule-list-item {
-            align-items: center;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            display: flex;
-            gap: 12px;
-            justify-content: space-between;
-            padding: 10px 12px;
-        }
-        .schedule-list-item + .schedule-list-item {
-            margin-top: 10px;
-        }
-        .schedule-list-title {
-            color: #1e293b;
-            font-size: .9rem;
-            font-weight: 700;
-        }
-        .schedule-list-meta {
-            color: #64748b;
-            font-size: .78rem;
-            margin-top: 2px;
-        }
-    </style>
 
 </head>
 
@@ -749,115 +557,6 @@ foreach ($calendar_events as $event_date => $events) {
         </div>
 
     <?php endif; ?>
-
-    <div class="content-card mb-4">
-
-        <div class="card-header">
-
-            <h5>
-                <i class="bi bi-calendar3"></i>
-                Schedule Calendar
-            </h5>
-
-        </div>
-
-        <div class="card-body">
-
-            <?php foreach ($calendar_months as $calendar_month): ?>
-
-                <?php
-                $month_start = new DateTime($calendar_month->format('Y-m-01'));
-                $month_end = new DateTime($calendar_month->format('Y-m-t'));
-                $grid_start = clone $month_start;
-                $grid_start->modify('-' . ((int)$grid_start->format('N') - 1) . ' days');
-                $grid_end = clone $month_end;
-                $grid_end->modify('+' . (7 - (int)$grid_end->format('N')) . ' days');
-                $day_cursor = clone $grid_start;
-                $today = date('Y-m-d');
-                ?>
-
-                <div class="inspection-calendar mb-4">
-
-                    <div class="calendar-title">
-                        <?php echo e($calendar_month->format('F Y')); ?>
-                    </div>
-
-                    <div class="calendar-weekdays">
-                        <div>Mon</div>
-                        <div>Tue</div>
-                        <div>Wed</div>
-                        <div>Thu</div>
-                        <div>Fri</div>
-                        <div>Sat</div>
-                        <div>Sun</div>
-                    </div>
-
-                    <div class="calendar-grid">
-
-                        <?php while ($day_cursor <= $grid_end): ?>
-
-                            <?php
-                            $date_key = $day_cursor->format('Y-m-d');
-                            $is_current_month = $day_cursor->format('m') === $calendar_month->format('m');
-                            $day_events = $calendar_events[$date_key] ?? [];
-                            $assigned_count = 0;
-                            $completed_count = 0;
-
-                            foreach ($day_events as $event) {
-                                if ($event['status'] === 'Completed') {
-                                    $completed_count++;
-                                } else {
-                                    $assigned_count++;
-                                }
-                            }
-                            ?>
-
-                            <div class="calendar-day <?php echo $is_current_month ? '' : 'is-muted'; ?> <?php echo $date_key === $today ? 'is-today' : ''; ?>">
-
-                                <div class="calendar-date">
-                                    <?php echo e($day_cursor->format('j')); ?>
-                                </div>
-
-                                <?php if (!empty($day_events)): ?>
-
-                                    <button
-                                        type="button"
-                                        class="calendar-count"
-                                        onclick="openDateSchedules('<?php echo e($date_key); ?>')"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#dateSchedulesModal">
-
-                                        <span class="count-number">
-                                            <?php echo count($day_events); ?>
-                                        </span>
-
-                                        <span>
-                                            Schedules
-                                            <br>
-                                            <small>
-                                                <?php echo $assigned_count; ?> Assigned / <?php echo $completed_count; ?> Complete
-                                            </small>
-                                        </span>
-
-                                    </button>
-
-                                <?php endif; ?>
-
-                            </div>
-
-                            <?php $day_cursor->modify('+1 day'); ?>
-
-                        <?php endwhile; ?>
-
-                    </div>
-
-                </div>
-
-            <?php endforeach; ?>
-
-        </div>
-
-    </div>
 
     <div class="content-card">
 
@@ -948,7 +647,10 @@ foreach ($calendar_events as $event_date => $events) {
                         <th>Train</th>
                         <th>Auditor</th>
                         <th>Assignment Date & Time</th>
+                        <th>Due Date</th>
+                        <th>Priority</th>
                         <th>Status</th>
+                        <th>Remarks</th>
                         <th>Actions</th>
 
                     </tr>
@@ -961,7 +663,7 @@ foreach ($calendar_events as $event_date => $events) {
 
                         <tr>
 
-                            <td colspan="6"
+                            <td colspan="9"
                                 class="text-center text-muted py-4">
 
                                 No schedules found.
@@ -1027,6 +729,33 @@ foreach ($calendar_events as $event_date => $events) {
                                 <td>
 
                                     <?php
+                                    echo $schedule['next_due_date']
+                                        ? date('d M Y', strtotime($schedule['next_due_date']))
+                                        : '-';
+                                    ?>
+
+                                </td>
+
+                                <td>
+
+                                    <?php
+                                    $priority_class =
+                                        ($schedule['priority'] === 'High')
+                                        ? 'badge-danger'
+                                        : 'badge-info';
+                                    ?>
+
+                                    <span class="badge <?php echo $priority_class; ?>">
+
+                                        <?php echo e($schedule['priority']); ?>
+
+                                    </span>
+
+                                </td>
+
+                                <td>
+
+                                    <?php
 
                                     $status_class = 'badge-warning';
 
@@ -1045,6 +774,12 @@ foreach ($calendar_events as $event_date => $events) {
                                         <?php echo e($schedule['status']); ?>
 
                                     </span>
+
+                                </td>
+
+                                <td>
+
+                                    <?php echo e($schedule['special_remarks']); ?>
 
                                 </td>
 
@@ -1078,6 +813,8 @@ foreach ($calendar_events as $event_date => $events) {
                                             '<?php echo e($schedule['schedule_id']); ?>',
                                             '<?php echo e($schedule['auditor_user_id']); ?>',
                                             '<?php echo e($schedule['assignment_date_time']); ?>',
+                                            '<?php echo e($schedule['priority']); ?>',
+                                            '<?php echo e(addslashes($schedule['special_remarks'])); ?>',
                                             '<?php echo e($schedule['status']); ?>'
                                         )"
                                         data-bs-toggle="modal"
@@ -1120,39 +857,6 @@ foreach ($calendar_events as $event_date => $events) {
     </div>
 
 </main>
-
-</div>
-
-<div class="modal fade"
-     id="dateSchedulesModal"
-     tabindex="-1">
-
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-
-        <div class="modal-content border-0 shadow-lg">
-
-            <div class="modal-header text-white"
-                 style="background-color:#61a2cb;">
-
-                <h5 class="modal-title" id="dateSchedulesTitle">
-                    Date Schedules
-                </h5>
-
-                <button type="button"
-                        class="btn-close btn-close-white"
-                        data-bs-dismiss="modal"></button>
-
-            </div>
-
-            <div class="modal-body">
-
-                <div id="dateSchedulesList"></div>
-
-            </div>
-
-        </div>
-
-    </div>
 
 </div>
 
@@ -1251,6 +955,28 @@ foreach ($calendar_events as $event_date => $events) {
                         <div class="col-md-6">
 
                             <label class="form-label">
+                                Priority
+                            </label>
+
+                            <select class="form-select"
+                                    name="priority"
+                                    id="editPriority">
+
+                                <option value="Normal">
+                                    Normal
+                                </option>
+
+                                <option value="High">
+                                    High
+                                </option>
+
+                            </select>
+
+                        </div>
+
+                        <div class="col-md-6">
+
+                            <label class="form-label">
                                 Status
                             </label>
 
@@ -1273,6 +999,19 @@ foreach ($calendar_events as $event_date => $events) {
                             </select>
 
                         </div>
+
+                    </div>
+
+                    <div class="mt-3">
+
+                        <label class="form-label">
+                            Special Remarks
+                        </label>
+
+                        <textarea class="form-control"
+                                  name="special_remarks"
+                                  rows="3"
+                                  id="editRemarks"></textarea>
 
                     </div>
 
@@ -1335,77 +1074,12 @@ foreach ($calendar_events as $event_date => $events) {
 
 <script>
 
-const calendarEvents = <?php echo json_encode($calendar_event_payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
-
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
-function formatDateTimeForInput(value) {
-    return value ? value.replace(' ', 'T').slice(0, 16) : '';
-}
-
-function openDateSchedules(dateKey) {
-    const events = calendarEvents[dateKey] || [];
-    const title = document.getElementById('dateSchedulesTitle');
-    const list = document.getElementById('dateSchedulesList');
-    const formattedDate = new Date(dateKey + 'T00:00:00').toLocaleDateString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
-    });
-
-    title.textContent = formattedDate + ' - ' + events.length + ' schedule(s)';
-
-    if (!events.length) {
-        list.innerHTML = '<p class="text-muted mb-0">No schedules found.</p>';
-        return;
-    }
-
-    list.innerHTML = events.map((event) => {
-        const isCompleted = event.status === 'Completed';
-        const statusClass = isCompleted ? 'bg-success' : 'bg-warning text-dark';
-        const actionButton = isCompleted
-            ? `<button type="button" class="btn btn-sm btn-outline-secondary" disabled>
-                   <i class="bi bi-lock"></i> Completed
-               </button>`
-            : `<button type="button"
-                       class="btn btn-sm btn-outline-primary"
-                       data-bs-dismiss="modal"
-                       onclick="editSchedule('${escapeHtml(event.schedule_id)}', '${escapeHtml(event.auditor_id)}', '${escapeHtml(event.assignment_date_time)}', '${escapeHtml(event.status)}')"
-                       data-bs-toggle="modal"
-                       data-bs-target="#editModal">
-                   <i class="bi bi-pencil"></i> Edit
-               </button>`;
-
-        return `
-            <div class="schedule-list-item">
-                <div>
-                    <div class="schedule-list-title">
-                        ${escapeHtml(event.coach_no || '-')}
-                        <span class="badge ${statusClass} ms-2">${escapeHtml(event.status)}</span>
-                    </div>
-                    <div class="schedule-list-meta">
-                        ${escapeHtml(event.train || 'Detached')} | ${escapeHtml(event.auditor || '-')} | ${escapeHtml(event.assignment_date_time || '-')}
-                    </div>
-                </div>
-                <div>
-                    ${actionButton}
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
 function editSchedule(
     scheduleId,
     auditorId,
     assignmentDateTime,
+    priority,
+    remarks,
     status
 ) {
 
@@ -1413,7 +1087,12 @@ function editSchedule(
 
     document.getElementById('editAuditor').value = auditorId;
 
-    document.getElementById('editDateTime').value = formatDateTimeForInput(assignmentDateTime);
+    document.getElementById('editDateTime').value =
+        assignmentDateTime.replace(' ', 'T');
+
+    document.getElementById('editPriority').value = priority;
+
+    document.getElementById('editRemarks').value = remarks;
 
     document.getElementById('editStatus').value = status;
 }

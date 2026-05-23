@@ -31,8 +31,16 @@ $inventory_id = (int) ($_GET['inventory_id'] ?? 0);
 $item = null;
 $manufacturers = [];
 $existing_units = [];
+$trains = [];
+$coaches = [];
 $message = '';
 $message_type = '';
+$unit_has_use_status = false;
+
+$use_status_check = $conn->query("SHOW COLUMNS FROM fdds_inventory_unit LIKE 'use_status'");
+if ($use_status_check && $use_status_check->num_rows > 0) {
+    $unit_has_use_status = true;
+}
 
 if ($inventory_id > 0) {
     $query = "SELECT inventory_id, item_code, item_name, quantity, category, status, remarks
@@ -52,32 +60,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $newPurchases = $_POST['new_purchase'] ?? [];
     $newWarrantyExpires = $_POST['new_warranty_expire'] ?? [];
     $newManufacturerIds = $_POST['new_manufacturer'] ?? [];
-    $newNotesList = $_POST['new_notes'] ?? [];
+    $newCoachIds = $_POST['new_coach_id'] ?? [];
 
     if ($inventory_id > 0) {
         $conn->begin_transaction();
         try {
-            $insertQuery = "INSERT INTO fdds_inventory_unit 
-                (inventory_id, user_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+            if ($unit_has_use_status) {
+                $insertQuery = "INSERT INTO fdds_inventory_unit
+                    (inventory_id, user_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes, use_status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            } else {
+                $insertQuery = "INSERT INTO fdds_inventory_unit
+                    (inventory_id, user_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+            }
             $insertStmt = $conn->prepare($insertQuery);
+            $coachCheckStmt = $conn->prepare("SELECT coach_id FROM fdss_train_coach WHERE coach_id = ? AND user_id = ? LIMIT 1");
+            $assignStmt = $conn->prepare("INSERT INTO fdss_coach_inventory (coach_id, inventory_unit_id, user_id, status) VALUES (?, ?, ?, 'Active')");
 
             $newRowCount = 0;
+            $assignedRowCount = 0;
             for ($i = 0; $i < count($newSerials); $i++) {
                 $serial = trim($newSerials[$i] ?? '');
                 $model = trim($newModels[$i] ?? '');
                 $purchase = trim($newPurchases[$i] ?? '');
                 $warrantyExpire = trim($newWarrantyExpires[$i] ?? '');
                 $manufacturerId = (int) ($newManufacturerIds[$i] ?? 0) ?: null;
-                $note = trim($newNotesList[$i] ?? '');
+                $note = '';
+                $coachId = (int) ($newCoachIds[$i] ?? 0);
+                $useStatus = $coachId > 0 ? 1 : 0;
 
                 // Only insert if at least one field is filled
-                if (!empty($serial) || !empty($model) || !empty($purchase) || !empty($warrantyExpire) || !empty($manufacturerId) || !empty($note)) {
-                    $insertStmt->bind_param('iissssis', $inventory_id, $user_id, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note);
+                if (!empty($serial) || !empty($model) || !empty($purchase) || !empty($warrantyExpire) || !empty($manufacturerId) || $coachId > 0) {
+                    if ($coachId > 0) {
+                        $coachCheckStmt->bind_param('ii', $coachId, $user_id);
+                        $coachCheckStmt->execute();
+                        $coachCheckResult = $coachCheckStmt->get_result();
+
+                        if ($coachCheckResult->num_rows === 0) {
+                            throw new Exception('Selected coach was not found.');
+                        }
+
+                        $coachCheckResult->free();
+                    }
+
+                    if ($unit_has_use_status) {
+                        $insertStmt->bind_param('iissssisi', $inventory_id, $user_id, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $useStatus);
+                    } else {
+                        $insertStmt->bind_param('iissssis', $inventory_id, $user_id, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note);
+                    }
                     $insertStmt->execute();
+                    $newUnitId = (int) $conn->insert_id;
+
+                    if ($coachId > 0) {
+                        $assignStmt->bind_param('iii', $coachId, $newUnitId, $user_id);
+                        $assignStmt->execute();
+                        $assignedRowCount++;
+                    }
+
                     $newRowCount++;
                 }
             }
+            $assignStmt->close();
+            $coachCheckStmt->close();
             $insertStmt->close();
 
             // Update total quantity
@@ -96,7 +141,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $updateInventoryStmt->close();
 
             $conn->commit();
-            $message = "Added {$newRowCount} new unit(s) successfully. Total count: {$totalCount}.";
+            $message = "Added {$newRowCount} new unit(s) successfully. {$assignedRowCount} assigned to coach. Total count: {$totalCount}.";
             $message_type = 'success';
             
             // Reload existing units
@@ -135,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     $purchase = trim($_POST['edit_purchase'] ?? '');
     $warrantyExpire = trim($_POST['edit_warranty_expire'] ?? '');
     $manufacturerId = (int) ($_POST['edit_manufacturer'] ?? 0) ?: null;
-    $note = trim($_POST['edit_notes'] ?? '');
+    $note = '';
 
     if ($unitId > 0 && $inventory_id > 0) {
         $updateQuery = "UPDATE fdds_inventory_unit 
@@ -177,10 +222,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
 }
 
 if ($item) {
-    $unit_query = "SELECT unit_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes
-                   FROM fdds_inventory_unit
-                   WHERE inventory_id = ? AND user_id = ?
-                   ORDER BY unit_id ASC";
+    $use_status_select = $unit_has_use_status ? 'iu.use_status' : '0 AS use_status';
+    $unit_query = "SELECT
+                       iu.unit_id,
+                       iu.serial_number,
+                       iu.model_number,
+                       iu.purchase_date,
+                       iu.warranty_expire,
+                       iu.manufacturer_id,
+                       iu.notes,
+                       $use_status_select,
+                       ci.coach_id,
+                       c.coach_no,
+                       t.train_no,
+                       t.train_name
+                   FROM fdds_inventory_unit iu
+                   LEFT JOIN fdss_coach_inventory ci
+                       ON ci.inventory_unit_id = iu.unit_id
+                       AND ci.user_id = iu.user_id
+                   LEFT JOIN fdss_train_coach c
+                       ON c.coach_id = ci.coach_id
+                       AND c.user_id = iu.user_id
+                   LEFT JOIN fdss_train_information t
+                       ON t.train_info_id = c.train_info_id
+                       AND t.user_id = iu.user_id
+                   WHERE iu.inventory_id = ? AND iu.user_id = ?
+                   ORDER BY (ci.coach_id IS NULL) DESC, iu.unit_id ASC";
     $unit_stmt = $conn->prepare($unit_query);
     $unit_stmt->bind_param('ii', $inventory_id, $user_id);
     $unit_stmt->execute();
@@ -190,6 +257,32 @@ if ($item) {
     }
     $unit_stmt->close();
 }
+
+$train_query = "SELECT train_info_id, train_no, train_name
+                FROM fdss_train_information
+                WHERE user_id = ? AND status = 'Active'
+                ORDER BY train_no ASC";
+$stmt = $conn->prepare($train_query);
+$stmt->bind_param('i', $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+while ($row = $result->fetch_assoc()) {
+    $trains[] = $row;
+}
+$stmt->close();
+
+$coach_query = "SELECT coach_id, coach_no, coach_type, train_info_id
+                FROM fdss_train_coach
+                WHERE user_id = ? AND status = 'Active'
+                ORDER BY coach_no ASC";
+$stmt = $conn->prepare($coach_query);
+$stmt->bind_param('i', $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+while ($row = $result->fetch_assoc()) {
+    $coaches[] = $row;
+}
+$stmt->close();
 
 $manufacturer_query = "SELECT manufacturer_id, company_name, name FROM fdss_manufacturers WHERE user_id = ? ORDER BY company_name";
 $stmt = $conn->prepare($manufacturer_query);
@@ -228,7 +321,41 @@ function e($value) {
             white-space: nowrap;
         }
         .unit-row-count {
-            min-width: 80px;
+            width: 42px;
+            min-width: 42px;
+            max-width: 42px;
+            text-align: center;
+        }
+        .print-only {
+            display: none;
+        }
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #existingUnitsPrintArea,
+            #existingUnitsPrintArea * {
+                visibility: visible;
+            }
+            #existingUnitsPrintArea {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-only {
+                display: block;
+            }
+            .table-responsive {
+                overflow: visible !important;
+            }
+            table {
+                width: 100% !important;
+                font-size: 11px;
+            }
         }
     </style>
 </head>
@@ -274,7 +401,7 @@ function e($value) {
                         <p><?php echo e($item['item_code']); ?></p>
                     </div>
                     <div class="col-md-4">
-                        <strong>Component Name</strong>
+                        <strong>Inventory Name</strong>
                         <p><?php echo e($item['item_name']); ?></p>
                     </div>
                     <div class="col-md-2">
@@ -314,8 +441,9 @@ function e($value) {
                                     <th>Model Number</th>
                                     <th>Purchase Date</th>
                                     <th>Warranty Expire</th>
+                                    <th>Train</th>
+                                    <th>Coach</th>
                                     <th>OEM</th>
-                                    <th>Notes</th>
                                     <th class="text-center">Actions</th>
                                 </tr>
                             </thead>
@@ -338,13 +466,25 @@ function e($value) {
         </div>
 
         <div class="content-card">
-            <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="card-header d-flex justify-content-between align-items-center gap-2 flex-wrap">
                 <h5><i class="bi bi-card-checklist"></i> Existing Units</h5>
+                <div class="d-flex gap-2 no-print">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="printExistingUnitsBtn">
+                        <i class="bi bi-printer"></i> Print
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-success" id="exportExistingUnitsBtn">
+                        <i class="bi bi-file-earmark-excel"></i> Excel
+                    </button>
+                </div>
             </div>
-            <div class="card-body">
+            <div class="card-body" id="existingUnitsPrintArea">
+                <div class="print-only text-center mb-3">
+                    <h3>Existing Units</h3>
+                    <p><?php echo e($item['item_code'] . ' - ' . $item['item_name']); ?></p>
+                </div>
                 <?php if (!empty($existing_units)): ?>
                     <div class="table-responsive">
-                        <table class="table table-bordered table-sm unit-table">
+                        <table class="table table-bordered table-sm unit-table" id="existingUnitsTable">
                             <thead class="table-light">
                                 <tr>
                                     <th class="unit-row-count">Unit #</th>
@@ -352,19 +492,36 @@ function e($value) {
                                     <th>Model Number</th>
                                     <th>Purchase Date</th>
                                     <th>Warranty Expire</th>
+                                    <th>Train</th>
+                                    <th>Coach</th>
                                     <th>OEM</th>
-                                    <th>Notes</th>
-                                    <th class="text-center">Actions</th>
+                                    <th>Status</th>
+                                    <th class="text-center no-print no-export">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php foreach ($existing_units as $idx => $unit): ?>
+                                    <?php
+                                        $is_used = !empty($unit['coach_no']) || (isset($unit['use_status']) && (int) $unit['use_status'] === 1);
+                                    ?>
                                     <tr>
                                         <td class="align-middle"><?php echo $idx + 1; ?></td>
                                         <td><?php echo e($unit['serial_number']); ?></td>
                                         <td><?php echo e($unit['model_number']); ?></td>
                                         <td><?php echo e($unit['purchase_date']); ?></td>
                                         <td><?php echo e($unit['warranty_expire']); ?></td>
+                                        <td>
+                                            <?php
+                                                if (!empty($unit['coach_id'])) {
+                                                    echo !empty($unit['train_no'])
+                                                        ? e($unit['train_no'] . ' - ' . $unit['train_name'])
+                                                        : 'Detached';
+                                                } else {
+                                                    echo '-';
+                                                }
+                                            ?>
+                                        </td>
+                                        <td><?php echo !empty($unit['coach_no']) ? e($unit['coach_no']) : '-'; ?></td>
                                         <td>
                                             <?php 
                                                 if (!empty($unit['manufacturer_id'])) {
@@ -376,16 +533,21 @@ function e($value) {
                                                 }
                                             ?>
                                         </td>
-                                        <td><?php echo e($unit['notes']); ?></td>
-                                        <td class="text-center align-middle">
+                                        <td>
+                                            <?php if ($is_used): ?>
+                                                <span class="badge bg-secondary">Used</span>
+                                            <?php else: ?>
+                                                <span class="badge bg-success">In_inventory</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="text-center align-middle no-print no-export">
                                             <button type="button" class="btn btn-sm btn-outline-primary editUnitBtn" 
                                                     data-unit-id="<?php echo e($unit['unit_id']); ?>"
                                                     data-serial="<?php echo e($unit['serial_number']); ?>"
                                                     data-model="<?php echo e($unit['model_number']); ?>"
                                                     data-purchase="<?php echo e($unit['purchase_date']); ?>"
                                                     data-warranty="<?php echo e($unit['warranty_expire']); ?>"
-                                                    data-manufacturer="<?php echo e($unit['manufacturer_id']); ?>"
-                                                    data-notes="<?php echo e($unit['notes']); ?>">
+                                                    data-manufacturer="<?php echo e($unit['manufacturer_id']); ?>">
                                                 <i class="bi bi-pencil"></i> Edit
                                             </button>
                                         </td>
@@ -455,11 +617,6 @@ function e($value) {
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    
-                    <div class="mb-3">
-                        <label for="editNotes" class="form-label">Notes</label>
-                        <input type="text" class="form-control" id="editNotes" name="edit_notes" placeholder="Optional notes">
-                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -481,6 +638,19 @@ function e($value) {
             'label' => trim($m['company_name'] . ($m['name'] ? ' - ' . $m['name'] : '')),
         ];
     }, $manufacturers), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+    const trains = <?php echo json_encode(array_map(function ($train) {
+        return [
+            'id' => (string) $train['train_info_id'],
+            'label' => trim($train['train_no'] . ' - ' . $train['train_name']),
+        ];
+    }, $trains), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+    const coaches = <?php echo json_encode(array_map(function ($coach) {
+        return [
+            'id' => (string) $coach['coach_id'],
+            'train_info_id' => $coach['train_info_id'] === null ? '' : (string) $coach['train_info_id'],
+            'label' => trim($coach['coach_no'] . ($coach['coach_type'] ? ' - ' . $coach['coach_type'] : '')),
+        ];
+    }, $coaches), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 
     const unitEntriesBody = document.getElementById('unitEntriesBody');
     const scrollTopBtn = document.getElementById('scrollTopBtn');
@@ -489,6 +659,8 @@ function e($value) {
     const unitCountForm = document.getElementById('unitCountForm');
     const resetUnitsBtn = document.getElementById('resetUnitsBtn');
     const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+    const printExistingUnitsBtn = document.getElementById('printExistingUnitsBtn');
+    const exportExistingUnitsBtn = document.getElementById('exportExistingUnitsBtn');
 
     function createManufacturerOptions() {
         if (manufacturers.length === 0) {
@@ -499,8 +671,45 @@ function e($value) {
         }
 
         return manufacturers.reduce((html, manufacturer) => {
-            return html + `<option value="${manufacturer.id}">${manufacturer.label}</option>`;
+            return html + `<option value="${escapeHtml(manufacturer.id)}">${escapeHtml(manufacturer.label)}</option>`;
         }, '<option value="">Select manufacturer</option>');
+    }
+
+    function createTrainOptions() {
+        return trains.reduce((html, train) => {
+            return html + `<option value="${escapeHtml(train.id)}">${escapeHtml(train.label)}</option>`;
+        }, '<option value="">No assignment</option><option value="Detached">Detached</option>');
+    }
+
+    function getCoachesForTrain(trainValue) {
+        if (!trainValue) {
+            return [];
+        }
+
+        return coaches.filter(coach => {
+            if (trainValue === 'Detached') {
+                return coach.train_info_id === '';
+            }
+
+            return coach.train_info_id === trainValue;
+        });
+    }
+
+    function setCoachOptions(row, selectedCoachId = '') {
+        const trainSelect = row.querySelector('[name="new_train_info_id[]"]');
+        const coachSelect = row.querySelector('[name="new_coach_id[]"]');
+        const trainValue = trainSelect ? trainSelect.value : '';
+        const matchingCoaches = getCoachesForTrain(trainValue);
+
+        coachSelect.innerHTML = matchingCoaches.reduce((html, coach) => {
+            return html + `<option value="${escapeHtml(coach.id)}">${escapeHtml(coach.label)}</option>`;
+        }, '<option value="">No coach</option>');
+
+        coachSelect.disabled = !trainValue;
+
+        if (selectedCoachId) {
+            coachSelect.value = selectedCoachId;
+        }
     }
 
     function escapeHtml(value) {
@@ -518,7 +727,7 @@ function e($value) {
         const purchaseValue = escapeHtml(data.purchase_date || '');
         const warrantyValue = escapeHtml(data.warranty_expire || '');
         const manufacturerValue = escapeHtml(data.manufacturer_id || '');
-        const notesValue = escapeHtml(data.notes || '');
+        const trainOptionsHtml = createTrainOptions();
 
         const row = document.createElement('tr');
         row.innerHTML = `
@@ -528,21 +737,34 @@ function e($value) {
             <td><input type="date" class="form-control form-control-sm" name="new_purchase[]" value="${purchaseValue}"></td>
             <td><input type="date" class="form-control form-control-sm" name="new_warranty_expire[]" value="${warrantyValue}"></td>
             <td>
+                <select class="form-select form-select-sm unit-train-select" name="new_train_info_id[]">
+                    ${trainOptionsHtml}
+                </select>
+            </td>
+            <td>
+                <select class="form-select form-select-sm" name="new_coach_id[]" disabled>
+                    <option value="">No coach</option>
+                </select>
+            </td>
+            <td>
                 <select class="form-select form-select-sm" name="new_manufacturer[]">
                     ${optionsHtml}
                 </select>
             </td>
-            <td><input type="text" class="form-control form-control-sm" name="new_notes[]" placeholder="Optional notes" value="${notesValue}"></td>
             <td class="text-center align-middle">
                 <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeRow(this)">
                     <i class="bi bi-dash-circle"></i>
                 </button>
             </td>
         `;
-        const select = row.querySelector('select');
+        const select = row.querySelector('[name="new_manufacturer[]"]');
         if (select && manufacturerValue) {
             select.value = manufacturerValue;
         }
+        row.querySelector('.unit-train-select')?.addEventListener('change', () => {
+            setCoachOptions(row);
+        });
+        setCoachOptions(row);
         return row;
     }
 
@@ -561,6 +783,9 @@ function e($value) {
             } else {
                 input.value = '';
             }
+        });
+        unitEntriesBody.querySelectorAll('tr').forEach(row => {
+            setCoachOptions(row);
         });
     }
 
@@ -590,17 +815,20 @@ function e($value) {
     }
 
     function downloadCsv() {
-        const rows = [['Unit #', 'Serial Number', 'Model Number', 'Purchase Date', 'Warranty Expire', 'Manufacturer', 'Notes']];
+        const rows = [['Unit #', 'Serial Number', 'Model Number', 'Purchase Date', 'Warranty Expire', 'Train', 'Coach', 'Manufacturer']];
         const rowCount = getRowCount();
         for (let i = 1; i <= rowCount; i++) {
             const serial = document.querySelectorAll('[name="new_serial[]"]')[i - 1]?.value || '';
             const model = document.querySelectorAll('[name="new_model[]"]')[i - 1]?.value || '';
             const purchase = document.querySelectorAll('[name="new_purchase[]"]')[i - 1]?.value || '';
+            const trainSelect = document.querySelectorAll('[name="new_train_info_id[]"]')[i - 1];
+            const train = trainSelect ? trainSelect.options[trainSelect.selectedIndex]?.text || '' : '';
+            const coachSelect = document.querySelectorAll('[name="new_coach_id[]"]')[i - 1];
+            const coach = coachSelect ? coachSelect.options[coachSelect.selectedIndex]?.text || '' : '';
             const manufacturerSelect = document.querySelectorAll('[name="new_manufacturer[]"]')[i - 1];
             const manufacturer = manufacturerSelect ? manufacturerSelect.options[manufacturerSelect.selectedIndex]?.text || '' : '';
             const warranty = document.querySelectorAll('[name="new_warranty_expire[]"]')[i - 1]?.value || '';
-            const notes = document.querySelectorAll('[name="new_notes[]"]')[i - 1]?.value || '';
-            rows.push([i, serial, model, purchase, warranty, manufacturer, notes]);
+            rows.push([i, serial, model, purchase, warranty, train, coach, manufacturer]);
         }
 
         const csvContent = rows.map(r => r.map(v => `"${(v || '').toString().replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -612,6 +840,43 @@ function e($value) {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    }
+
+    function exportExistingUnitsExcel() {
+        const sourceTable = document.getElementById('existingUnitsTable');
+
+        if (!sourceTable) {
+            return;
+        }
+
+        const exportTable = sourceTable.cloneNode(true);
+        exportTable.querySelectorAll('.no-export').forEach(element => element.remove());
+
+        const workbookHtml = `
+            <html>
+                <head>
+                    <meta charset="UTF-8">
+                </head>
+                <body>
+                    <h3>Existing Units</h3>
+                    <p>${escapeHtml(<?php echo json_encode($item['item_code'] . ' - ' . $item['item_name']); ?>)}</p>
+                    ${exportTable.outerHTML}
+                </body>
+            </html>
+        `;
+
+        const blob = new Blob([workbookHtml], {
+            type: 'application/vnd.ms-excel;charset=utf-8;'
+        });
+        const link = document.createElement('a');
+        const date = new Date().toISOString().slice(0, 10);
+
+        link.href = URL.createObjectURL(blob);
+        link.download = `existing-units-${<?php echo json_encode($item['item_code']); ?>}-${date}.xls`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
     }
 
     resetUnitsBtn?.addEventListener('click', () => {
@@ -631,6 +896,12 @@ function e($value) {
 
     downloadCsvBtn?.addEventListener('click', downloadCsv);
 
+    printExistingUnitsBtn?.addEventListener('click', () => {
+        window.print();
+    });
+
+    exportExistingUnitsBtn?.addEventListener('click', exportExistingUnitsExcel);
+
     scrollTopBtn?.addEventListener('click', () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     });
@@ -648,7 +919,6 @@ function e($value) {
             const purchase = this.getAttribute('data-purchase');
             const warranty = this.getAttribute('data-warranty');
             const manufacturer = this.getAttribute('data-manufacturer');
-            const notes = this.getAttribute('data-notes');
 
             document.getElementById('editUnitId').value = unitId;
             document.getElementById('editSerial').value = serial || '';
@@ -656,7 +926,6 @@ function e($value) {
             document.getElementById('editPurchase').value = purchase || '';
             document.getElementById('editWarrantyExpire').value = warranty || '';
             document.getElementById('editManufacturer').value = manufacturer || '';
-            document.getElementById('editNotes').value = notes || '';
 
             editUnitModal.show();
         });

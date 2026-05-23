@@ -12,19 +12,44 @@ if (!isset($_SESSION['user_id'])) {
 $message = '';
 $message_type = '';
 $user_id = (int)$_SESSION['user_id'];
+$item_code_prefix = 'INV-WC-';
+$allowed_categories = ['FDSS', 'FSDS', 'Primary', 'Secondary'];
+
+function generate_next_item_code(mysqli $conn, int $user_id, string $prefix): string
+{
+    $like_pattern = $prefix . '%';
+    $regex_pattern = '^' . preg_quote($prefix, '/') . '[0-9]+$';
+    $query = "SELECT MAX(CAST(SUBSTRING(item_code, ?) AS UNSIGNED)) AS last_number
+              FROM fdss_Inventory_Management
+              WHERE user_id = ?
+              AND item_code LIKE ?
+              AND item_code REGEXP ?";
+
+    $stmt = $conn->prepare($query);
+    $start_position = strlen($prefix) + 1;
+    $stmt->bind_param("iiss", $start_position, $user_id, $like_pattern, $regex_pattern);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $stmt->close();
+
+    $next_number = ((int)($row['last_number'] ?? 0)) + 1;
+
+    return $prefix . str_pad((string)$next_number, 3, '0', STR_PAD_LEFT);
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'add_inventory') {
-        $item_code = trim($_POST['item_code'] ?? '');
+        $item_code = generate_next_item_code($conn, $user_id, $item_code_prefix);
         $item_name = trim($_POST['item_name'] ?? '');
-        $quantity = (int)($_POST['quantity'] ?? 0);
         $status = $_POST['status'] ?? 'Working';
         $category = $_POST['category'] ?? 'Primary';
+        $category = in_array($category, $allowed_categories, true) ? $category : 'FDSS';
         $remarks = trim($_POST['remarks'] ?? '');
 
-        if ($item_code === '' || $item_name === '' || $quantity < 0) {
+        if ($item_name === '') {
             $message = "Please fill all required fields.";
             $message_type = "danger";
         } else {
@@ -40,14 +65,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $insert_query = "INSERT INTO fdss_Inventory_Management 
                     (item_code, item_name, quantity, status, category, user_id, remarks) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?)";
+                    VALUES (?, ?, NULL, ?, ?, ?, ?)";
 
                 $stmt = $conn->prepare($insert_query);
                 $stmt->bind_param(
-                    "ssissis",
+                    "ssssis",
                     $item_code,
                     $item_name,
-                    $quantity,
                     $status,
                     $category,
                     $user_id,
@@ -71,34 +95,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     elseif ($action === 'edit_inventory') {
         $inventory_id = (int)($_POST['inventory_id'] ?? 0);
-        $item_code = trim($_POST['item_code'] ?? '');
         $item_name = trim($_POST['item_name'] ?? '');
-        $quantity = (int)($_POST['quantity'] ?? 0);
         $status = $_POST['status'] ?? 'Working';
         $category = $_POST['category'] ?? 'Primary';
+        $category = in_array($category, $allowed_categories, true) ? $category : 'FDSS';
         $remarks = trim($_POST['remarks'] ?? '');
 
-        $check_query = "SELECT inventory_id FROM fdss_Inventory_Management 
-                        WHERE user_id = ? AND item_code = ? AND inventory_id != ?";
+        $check_query = "SELECT inventory_id, item_code FROM fdss_Inventory_Management
+                        WHERE user_id = ? AND inventory_id = ?";
         $check_stmt = $conn->prepare($check_query);
-        $check_stmt->bind_param("isi", $user_id, $item_code, $inventory_id);
+        $check_stmt->bind_param("ii", $user_id, $inventory_id);
         $check_stmt->execute();
         $check_result = $check_stmt->get_result();
 
-        if ($check_result->num_rows > 0) {
-            $message = "Item code already exists!";
+        if ($check_result->num_rows === 0) {
+            $message = "Inventory item not found.";
             $message_type = "danger";
         } else {
+            $item_code = $check_result->fetch_assoc()['item_code'];
             $update_query = "UPDATE fdss_Inventory_Management 
-                SET item_code = ?, item_name = ?, quantity = ?, status = ?, category = ?, remarks = ?, last_updated = CURRENT_TIMESTAMP
+                SET item_name = ?, status = ?, category = ?, remarks = ?, last_updated = CURRENT_TIMESTAMP
                 WHERE inventory_id = ? AND user_id = ?";
 
             $stmt = $conn->prepare($update_query);
             $stmt->bind_param(
-                "ssisssii",
-                $item_code,
+                "ssssii",
                 $item_name,
-                $quantity,
                 $status,
                 $category,
                 $remarks,
@@ -141,7 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $inventory_items = [];
 
-$query = "SELECT inventory_id, item_code, item_name, quantity, status, category, user_id, last_updated, remarks, created_at, updated_at
+$query = "SELECT inventory_id, item_code, item_name, status, category, user_id, last_updated, remarks, created_at, updated_at
           FROM fdss_Inventory_Management
           WHERE user_id = ?
           ORDER BY inventory_id DESC";
@@ -156,6 +178,7 @@ while ($row = $result->fetch_assoc()) {
 }
 
 $stmt->close();
+$next_item_code = generate_next_item_code($conn, $user_id, $item_code_prefix);
 ?>
 
 <!DOCTYPE html>
@@ -163,7 +186,7 @@ $stmt->close();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Component Management - FDSS Dashboard</title>
+    <title>Inventory Management - FDSS Dashboard</title>
 
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.0/font/bootstrap-icons.min.css" rel="stylesheet">
@@ -179,12 +202,12 @@ $stmt->close();
     <main class="main-content">
         <div class="page-header">
             <div>
-                <h1>Component Management</h1>
+                <h1>Inventory Management</h1>
                 <p class="page-header-subtitle">Manage stock levels and track components</p>
             </div>
             <div class="page-header-actions">
                 <button class="btn btn-primary" id="addInventoryBtn" data-bs-toggle="modal" data-bs-target="#inventoryModal">
-                    <i class="bi bi-plus-circle"></i> Add Component
+                    <i class="bi bi-plus-circle"></i> Add Inventory
                 </button>
             </div>
         </div>
@@ -200,7 +223,7 @@ $stmt->close();
             <div class="card-header">
                 <h5>
                     <i class="bi bi-boxes"></i>
-                    Component List (<?php echo count($inventory_items); ?> Total)
+                    Inventory List (<?php echo count($inventory_items); ?> Total)
                 </h5>
             </div>
 
@@ -210,8 +233,7 @@ $stmt->close();
                         <thead>
                             <tr>
                                 <th>Item Code</th>
-                                <th>Component Name</th>
-                                <th>Quantity / Count</th>
+                                <th>Inventory Name</th>
                                 <th>Category</th>
                                 <th>Last Updated</th>
                                 <th>Actions</th>
@@ -221,7 +243,7 @@ $stmt->close();
                         <tbody>
                         <?php if (empty($inventory_items)): ?>
                             <tr>
-                                <td colspan="6" class="text-center text-muted py-4">
+                                <td colspan="5" class="text-center text-muted py-4">
                                     No components found. Click "Add Component" to create one.
                                 </td>
                             </tr>
@@ -234,9 +256,8 @@ $stmt->close();
                                         </a>
                                     </td>
                                     <td><?php echo htmlspecialchars($item['item_name']); ?></td>
-                                    <td><?php echo htmlspecialchars($item['quantity']); ?></td>
                                     <td>
-                                        <span class="badge <?php echo ($item['category'] === 'Primary') ? 'badge-success' : 'badge-info'; ?>">
+                                        <span class="badge <?php echo in_array($item['category'], ['Primary', 'FDSS'], true) ? 'badge-success' : 'badge-info'; ?>">
                                             <?php echo htmlspecialchars($item['category']); ?>
                                         </span>
                                     </td>
@@ -250,7 +271,6 @@ $stmt->close();
                                                 '<?php echo htmlspecialchars($item['inventory_id']); ?>',
                                                 '<?php echo htmlspecialchars(addslashes($item['item_code'])); ?>',
                                                 '<?php echo htmlspecialchars(addslashes($item['item_name'])); ?>',
-                                                '<?php echo htmlspecialchars($item['quantity']); ?>',
                                                 '<?php echo htmlspecialchars($item['status']); ?>',
                                                 '<?php echo htmlspecialchars($item['category']); ?>',
                                                 '<?php echo htmlspecialchars(addslashes($item['remarks'] ?? '')); ?>'
@@ -295,22 +315,27 @@ $stmt->close();
                 <div class="modal-body">
                     <div class="form-group mb-3">
                         <label class="form-label">Item Code <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="itemCode" name="item_code" placeholder="e.g., INV-WC-001" required>
+                        <input
+                            type="text"
+                            class="form-control"
+                            id="itemCode"
+                            name="item_code"
+                            value="<?php echo htmlspecialchars($next_item_code); ?>"
+                            readonly
+                            required
+                        >
                     </div>
 
                     <div class="form-group mb-3">
-                        <label class="form-label">Component Item <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="itemName" name="item_name" placeholder="Enter Component item" required>
-                    </div>
-
-                    <div class="form-group mb-3">
-                        <label class="form-label">Quantity <span class="text-danger">*</span></label>
-                        <input type="number" class="form-control" id="itemQuantity" name="quantity" min="0" placeholder="Enter quantity" required>
+                        <label class="form-label">Inventory Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="itemName" name="item_name" placeholder="Enter Inventory name" required>
                     </div>
 
                     <div class="form-group mb-3">
                         <label class="form-label">Category <span class="text-danger">*</span></label>
                         <select class="form-select" id="itemCategory" name="category" required>
+                            <option value="FDSS">FDSS</option>
+                            <option value="FSDS">FSDS</option>
                             <option value="Primary">Primary</option>
                             <option value="Secondary">Secondary</option>
                         </select>
@@ -358,26 +383,25 @@ const addInventoryBtn = document.getElementById('addInventoryBtn');
 const modalTitle = inventoryModalEl.querySelector('.modal-title');
 const submitInventoryBtn = document.getElementById('submitInventoryBtn');
 const formAction = document.getElementById('formAction');
+const nextItemCode = <?php echo json_encode($next_item_code); ?>;
 
 function resetInventoryForm() {
     document.getElementById('inventoryId').value = '';
-    document.getElementById('itemCode').value = '';
+    document.getElementById('itemCode').value = nextItemCode;
     document.getElementById('itemName').value = '';
-    document.getElementById('itemQuantity').value = '';
-    document.getElementById('itemCategory').value = 'Primary';
+    document.getElementById('itemCategory').value = 'FDSS';
     document.getElementById('itemStatus').value = 'Working';
     document.getElementById('itemRemarks').value = '';
 
     formAction.value = 'add_inventory';
-    modalTitle.textContent = 'Add Component Item';
+    modalTitle.textContent = 'Add Inventory Item';
     submitInventoryBtn.textContent = 'Add Item';
 }
 
-function editInventory(id, itemCode, itemName, quantity, status, category, remarks) {
+function editInventory(id, itemCode, itemName, status, category, remarks) {
     document.getElementById('inventoryId').value = id;
     document.getElementById('itemCode').value = itemCode;
     document.getElementById('itemName').value = itemName;
-    document.getElementById('itemQuantity').value = quantity;
     document.getElementById('itemStatus').value = status;
     document.getElementById('itemCategory').value = category;
     document.getElementById('itemRemarks').value = remarks;

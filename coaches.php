@@ -237,6 +237,37 @@ function e($value) {
         .table-hover td form {
             margin-bottom: 0;
         }
+        .print-only {
+            display: none;
+        }
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #coachesPrintArea,
+            #coachesPrintArea * {
+                visibility: visible;
+            }
+            #coachesPrintArea {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-only {
+                display: block;
+            }
+            .table-wrapper {
+                overflow: visible !important;
+            }
+            table {
+                width: 100% !important;
+                font-size: 12px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -306,35 +337,47 @@ function e($value) {
         </div>
 
         <div class="content-card">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center gap-2 flex-wrap">
                 <h5>
                     <i class="bi bi-box-seam"></i>
                     Coaches List (<?php echo count($coaches); ?> Total)
                 </h5>
+                <div class="d-flex gap-2 no-print">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+                        <i class="bi bi-printer"></i> Print
+                    </button>
+                    <button type="button" class="btn btn-outline-success btn-sm" id="exportExcelBtn">
+                        <i class="bi bi-file-earmark-excel"></i> Excel
+                    </button>
+                </div>
             </div>
 
-            <div class="card-body">
+            <div class="card-body" id="coachesPrintArea">
+                <div class="print-only text-center mb-3">
+                    <h3>Coaches List</h3>
+                    <p>Generated on <?php echo e(date('Y-m-d')); ?></p>
+                </div>
                 <div class="table-wrapper">
-                    <table class="table table-hover">
+                    <table class="table table-hover" id="coachesTable">
                         <thead>
                             <tr>
                                 <th>Coach No.</th>
                                 <th>Coach Type</th>
                                 <th>Train Assigned</th>
-                                <th>Assign Train</th>
+                                <th class="no-print no-export">Assign Train</th>
                                 <th>Total Components</th>
                                 <th>Active Components</th>
                                 <th>Expired Components</th>
                                 <th>Expire Soon</th>
                                 <!-- <th>Status Detached / Intact </th> -->
                                 <th>Next Inspection</th>
-                                <th>Actions</th>
+                                <th class="no-print no-export">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                         <?php if (empty($coaches)): ?>
                             <tr>
-                                <td colspan="11" class="text-center text-muted py-4">
+                                <td colspan="10" class="text-center text-muted py-4">
                                     No coaches found. Click "Add Coach" to create one.
                                 </td>
                             </tr>
@@ -351,7 +394,7 @@ function e($value) {
                                     </td>
                                     <td><?php echo e($coach['coach_type'] ?: '-'); ?></td>
                                     <td><?php echo e($coach['train_info_id'] ? $coach['train_no'] . ' - ' . $coach['train_name'] : 'Detached'); ?></td>
-                                    <td>
+                                    <td class="no-print no-export">
                                         <form method="POST" class="d-flex gap-1">
                                             <input type="hidden" name="action" value="assign_train">
                                             <input type="hidden" name="coach_id" value="<?php echo e($coach['coach_id']); ?>">
@@ -377,7 +420,7 @@ function e($value) {
                                     <td>
                                         <?php echo $coach['next_inspection_date'] ? e(date('Y-m-d', strtotime($coach['next_inspection_date']))) : '-'; ?>
                                     </td>
-                                    <td>
+                                    <td class="no-print no-export">
                                         <!-- <a 
                                             class="btn btn-sm btn-info"
                                             href="coach-inventory.php?train_info_id=<?php echo e($coach['train_info_id']); ?>&coach_no=<?php echo urlencode($coach['coach_no']); ?>">
@@ -518,6 +561,7 @@ addCoachBtn.addEventListener('click', resetCoachForm);
 
 const coachFilter = document.getElementById('coachFilter');
 const rowCountSelect = document.getElementById('rowCountSelect');
+const exportExcelBtn = document.getElementById('exportExcelBtn');
 
 function applyCoachFilters() {
     const filterValue = coachFilter ? coachFilter.value : '';
@@ -556,6 +600,54 @@ if (rowCountSelect) {
 }
 
 applyCoachFilters();
+
+function downloadCoachesExcel() {
+    const sourceTable = document.getElementById('coachesTable');
+
+    if (!sourceTable) {
+        return;
+    }
+
+    const exportTable = sourceTable.cloneNode(true);
+
+    exportTable.querySelectorAll('.no-export').forEach(element => element.remove());
+    Array.from(exportTable.tBodies[0].rows).forEach((row, index) => {
+        const originalRow = sourceTable.tBodies[0].rows[index];
+
+        if (originalRow && originalRow.style.display === 'none') {
+            row.remove();
+        }
+    });
+
+    const workbookHtml = `
+        <html>
+            <head>
+                <meta charset="UTF-8">
+            </head>
+            <body>
+                <h3>Coaches List</h3>
+                ${exportTable.outerHTML}
+            </body>
+        </html>
+    `;
+
+    const blob = new Blob([workbookHtml], {
+        type: 'application/vnd.ms-excel;charset=utf-8;'
+    });
+    const link = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+
+    link.href = URL.createObjectURL(blob);
+    link.download = `coaches-list-${date}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+}
+
+if (exportExcelBtn) {
+    exportExcelBtn.addEventListener('click', downloadCoachesExcel);
+}
 
 coachModalEl.addEventListener('hidden.bs.modal', resetCoachForm);
 </script>

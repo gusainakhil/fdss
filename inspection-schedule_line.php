@@ -373,16 +373,23 @@ if ($stmt) {
     $message_type = "danger";
 }
 
+$calendar_events = [];
+
+foreach ($coaches as $coach) {
+    $calendar_events[$coach['next_inspection_date']][] = [
+        'type' => 'due',
+        'data' => $coach,
+    ];
+}
+
 /*
 |--------------------------------------------------------------------------
-| FETCH RECENT SCHEDULES
+| FETCH CREATED SCHEDULES FOR CALENDAR
 |--------------------------------------------------------------------------
 */
 
-$recent_schedules = [];
-
 if ($schedule_uses_coach_id) {
-    $recent_query = "SELECT
+    $scheduled_query = "SELECT
                         s.schedule_id,
                         s.coach_id,
                         s.assignment_date_time,
@@ -401,11 +408,15 @@ if ($schedule_uses_coach_id) {
                      LEFT JOIN fdss_train_information t
                         ON t.train_info_id = COALESCE(s.train_info_id, c.train_info_id)
                      WHERE s.user_id = ?
-                     AND DATE(s.assignment_date_time) BETWEEN ? AND ?
-                     ORDER BY s.schedule_id DESC
-                     LIMIT 10";
+                     AND s.assignment_date_time IS NOT NULL";
+
+    if ($selected_train !== 'all') {
+        $scheduled_query .= " AND COALESCE(s.train_info_id, c.train_info_id) = ?";
+    }
+
+    $scheduled_query .= " ORDER BY s.assignment_date_time ASC";
 } else {
-    $recent_query = "SELECT
+    $scheduled_query = "SELECT
                         s.schedule_id,
                         NULL AS coach_id,
                         s.assignment_date_time,
@@ -422,30 +433,92 @@ if ($schedule_uses_coach_id) {
                      LEFT JOIN fdss_train_information t
                         ON t.train_info_id = s.train_info_id
                      WHERE s.user_id = ?
-                     AND DATE(s.assignment_date_time) BETWEEN ? AND ?
-                     ORDER BY s.schedule_id DESC
-                     LIMIT 10";
+                     AND s.assignment_date_time IS NOT NULL";
+
+    if ($selected_train !== 'all') {
+        $scheduled_query .= " AND s.train_info_id = ?";
+    }
+
+    $scheduled_query .= " ORDER BY s.assignment_date_time ASC";
 }
 
-$stmt = $conn->prepare($recent_query);
+$stmt = $conn->prepare($scheduled_query);
 
 if ($stmt) {
 
-    $stmt->bind_param("iss", $user_id, $today, $advance_cutoff_date);
+    if ($selected_train !== 'all') {
+        $selected_train_id = (int) $selected_train;
+        $stmt->bind_param("ii", $user_id, $selected_train_id);
+    } else {
+        $stmt->bind_param("i", $user_id);
+    }
 
     $stmt->execute();
 
-    $recent_result = $stmt->get_result();
+    $scheduled_result = $stmt->get_result();
 
-    while ($row = $recent_result->fetch_assoc()) {
-        $recent_schedules[] = $row;
+    while ($row = $scheduled_result->fetch_assoc()) {
+        $event_date = date('Y-m-d', strtotime($row['assignment_date_time']));
+
+        $calendar_events[$event_date][] = [
+            'type' => 'scheduled',
+            'data' => $row,
+        ];
     }
 
     $stmt->close();
 
 } else {
-    $message = "Recent Schedule SQL Error: " . $conn->error;
+    $message = "Scheduled Calendar SQL Error: " . $conn->error;
     $message_type = "danger";
+}
+
+$calendar_month_map = [];
+
+foreach ($calendar_events as $event_date => $events) {
+    $month_key = date('Y-m', strtotime($event_date));
+    $calendar_month_map[$month_key] = new DateTime($month_key . '-01');
+}
+
+if (empty($calendar_month_map)) {
+    $calendar_month_map[date('Y-m')] = new DateTime(date('Y-m-01'));
+}
+
+ksort($calendar_month_map);
+$calendar_months = array_values($calendar_month_map);
+$calendar_event_payload = [];
+
+foreach ($calendar_events as $event_date => $events) {
+    foreach ($events as $event) {
+        if ($event['type'] === 'due') {
+            $coach = $event['data'];
+
+            $calendar_event_payload[$event_date][] = [
+                'type' => 'due',
+                'coach_id' => $coach['coach_id'],
+                'train_info_id' => $coach['train_info_id'] ?? '',
+                'coach_no' => $coach['coach_no'],
+                'train_no' => $coach['train_no'] ?: 'Detached',
+                'date' => $coach['next_inspection_date'],
+            ];
+        } else {
+            $schedule = $event['data'];
+
+            $calendar_event_payload[$event_date][] = [
+                'type' => 'scheduled',
+                'coach_no' => $schedule['coach_no'],
+                'train_no' => $schedule['train_no'] ?: 'Detached',
+                'auditor' => !empty($schedule['full_name'])
+                    ? $schedule['full_name']
+                    : $schedule['user_name'],
+                'time' => !empty($schedule['assignment_date_time'])
+                    ? date('h:i A', strtotime($schedule['assignment_date_time']))
+                    : '',
+                'priority' => $schedule['priority'],
+                'status' => $schedule['status'],
+            ];
+        }
+    }
 }
 
 ?>
@@ -472,6 +545,229 @@ if ($stmt) {
 
     <link href="assets/css/styles.css"
           rel="stylesheet">
+
+    <style>
+        .inspection-calendar {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background: #ffffff;
+            overflow-x: auto;
+        }
+
+        .calendar-title {
+            background: #61a2cb;
+            color: #ffffff;
+            font-size: .92rem;
+            font-weight: 700;
+            letter-spacing: 0;
+            padding: 9px 12px;
+            text-transform: uppercase;
+        }
+
+        .calendar-weekdays,
+        .calendar-grid {
+            min-width: 640px;
+            display: grid;
+            grid-template-columns: repeat(7, minmax(82px, 1fr));
+        }
+
+        .calendar-weekdays > div {
+            background: #f8fafc;
+            border-bottom: 1px solid #e5e7eb;
+            border-right: 1px solid #e5e7eb;
+            color: #475569;
+            font-size: .68rem;
+            font-weight: 700;
+            padding: 6px;
+            text-align: center;
+            text-transform: uppercase;
+        }
+
+        .calendar-weekdays > div:last-child {
+            border-right: 0;
+        }
+
+        .calendar-day {
+            border-bottom: 1px solid #e5e7eb;
+            border-right: 1px solid #e5e7eb;
+            min-height: 82px;
+            padding: 25px 5px 5px;
+            position: relative;
+        }
+
+        .calendar-day:nth-child(7n) {
+            border-right: 0;
+        }
+
+        .calendar-day.is-muted {
+            background: #f8fafc;
+            color: #cbd5e1;
+        }
+
+        .calendar-day.is-today {
+            background: #f0f9ff;
+        }
+
+        .calendar-date {
+            background: #e0f2fe;
+            border-bottom: 1px solid #bae6fd;
+            color: #075985;
+            font-size: .78rem;
+            font-weight: 700;
+            left: 0;
+            line-height: 20px;
+            padding-right: 7px;
+            position: absolute;
+            right: 0;
+            text-align: right;
+            top: 0;
+        }
+
+        .calendar-event {
+            background: #eef7fb;
+            border: 1px solid #c9e7f4;
+            border-radius: 6px;
+            color: #1e293b;
+            display: grid;
+            gap: 1px;
+            grid-template-columns: auto 1fr;
+            line-height: 1.2;
+            margin-bottom: 5px;
+            padding: 4px 5px;
+            text-align: left;
+            width: 100%;
+        }
+
+        .calendar-count {
+            align-items: center;
+            background: #eef7fb;
+            border: 1px solid #c9e7f4;
+            border-radius: 6px;
+            color: #075985;
+            display: flex;
+            font-size: .72rem;
+            font-weight: 700;
+            gap: 6px;
+            justify-content: center;
+            line-height: 1.2;
+            margin-top: 6px;
+            min-height: 36px;
+            padding: 6px;
+            text-align: center;
+            width: 100%;
+        }
+
+        .calendar-count:hover {
+            background: #dff1f8;
+            border-color: #61a2cb;
+            color: #075985;
+        }
+
+        .calendar-count .count-number {
+            font-size: 1rem;
+        }
+
+        .schedule-list-item {
+            align-items: center;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            display: flex;
+            gap: 12px;
+            justify-content: space-between;
+            padding: 10px 12px;
+        }
+
+        .schedule-list-item + .schedule-list-item {
+            margin-top: 10px;
+        }
+
+        .schedule-list-item.is-scheduled {
+            background: #f8fafc;
+        }
+
+        .schedule-list-title {
+            color: #1e293b;
+            font-size: .9rem;
+            font-weight: 700;
+        }
+
+        .schedule-list-meta {
+            color: #64748b;
+            font-size: .78rem;
+            margin-top: 2px;
+        }
+
+        .calendar-event:hover {
+            background: #dff1f8;
+            border-color: #61a2cb;
+        }
+
+        .calendar-event:hover .event-title,
+        .calendar-event:hover .event-meta {
+            color: #075985;
+            text-decoration: none;
+        }
+
+        .calendar-event.is-scheduled {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+            cursor: default;
+            opacity: .9;
+        }
+
+        .calendar-event.is-scheduled:hover {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+        }
+
+        .calendar-event.is-scheduled .event-time {
+            color: #64748b;
+        }
+
+        .calendar-event.is-scheduled .event-title,
+        .calendar-event.is-scheduled .event-meta,
+        .calendar-event.is-scheduled:hover .event-title,
+        .calendar-event.is-scheduled:hover .event-meta {
+            color: #475569;
+            text-decoration: none;
+        }
+
+        .event-time {
+            color: #0f759b;
+            font-size: .62rem;
+            font-weight: 700;
+            padding-right: 5px;
+        }
+
+        .event-title {
+            font-size: .68rem;
+            font-weight: 700;
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+
+        .event-meta {
+            color: #64748b;
+            font-size: .62rem;
+            grid-column: 2;
+            overflow-wrap: anywhere;
+        }
+
+        @media (max-width: 767.98px) {
+            .calendar-title {
+                font-size: .84rem;
+            }
+
+            .calendar-weekdays,
+            .calendar-grid {
+                min-width: 600px;
+            }
+
+            .calendar-day {
+                min-height: 78px;
+            }
+        }
+    </style>
 
 </head>
 
@@ -584,7 +880,7 @@ if ($stmt) {
 
     <div class="row">
 
-        <div class="col-lg-7">
+        <div class="col-12">
 
             <div class="content-card">
 
@@ -594,7 +890,7 @@ if ($stmt) {
 
                         <i class="bi bi-calendar-check"></i>
 
-                        Upcoming Inspection Due Coaches
+                        Inspection Schedule Calendar
 
                         <small class="text-muted">
                             (Overdue to <?php echo e($selected_date); ?>)
@@ -606,253 +902,159 @@ if ($stmt) {
 
                 <div class="card-body">
 
-                    <div class="table-wrapper">
+                    <?php if (empty($calendar_events)): ?>
 
-                        <table class="table table-hover">
+                        <div class="text-center text-muted py-4">
+                            No due or scheduled inspections found.
+                        </div>
 
-                            <thead>
+                    <?php else: ?>
 
-                            <tr>
+                        <?php foreach ($calendar_months as $calendar_month): ?>
 
-                                <th>Due Date</th>
-                                <th>Coach No.</th>
-                                <th>Train</th>
-                                <th>Coach Type</th>
-                                <th>Action</th>
+                            <?php
+                            $month_start = new DateTime($calendar_month->format('Y-m-01'));
+                            $month_end = new DateTime($calendar_month->format('Y-m-t'));
+                            $grid_start = clone $month_start;
+                            $grid_start->modify('-' . ((int)$grid_start->format('N') - 1) . ' days');
+                            $grid_end = clone $month_end;
+                            $grid_end->modify('+' . (7 - (int)$grid_end->format('N')) . ' days');
+                            $day_cursor = clone $grid_start;
+                            ?>
 
-                            </tr>
+                            <div class="inspection-calendar mb-4">
 
-                            </thead>
+                                <div class="calendar-title">
+                                    <?php echo e($calendar_month->format('F Y')); ?>
+                                </div>
 
-                            <tbody>
+                                <div class="calendar-weekdays">
+                                    <div>Mon</div>
+                                    <div>Tue</div>
+                                    <div>Wed</div>
+                                    <div>Thu</div>
+                                    <div>Fri</div>
+                                    <div>Sat</div>
+                                    <div>Sun</div>
+                                </div>
 
-                            <?php if (empty($coaches)): ?>
+                                <div class="calendar-grid">
 
-                                <tr>
+                                    <?php while ($day_cursor <= $grid_end): ?>
 
-                                    <td colspan="5"
-                                        class="text-center text-muted py-4">
+                                        <?php
+                                        $date_key = $day_cursor->format('Y-m-d');
+                                        $is_current_month = $day_cursor->format('m') === $calendar_month->format('m');
+                                        $day_events = $calendar_events[$date_key] ?? [];
+                                        ?>
 
-                                        No overdue coaches or coaches due within next 3 days.
+                                        <div class="calendar-day <?php echo $is_current_month ? '' : 'is-muted'; ?> <?php echo $date_key === $today ? 'is-today' : ''; ?>">
 
-                                    </td>
+                                            <div class="calendar-date">
+                                                <?php echo e($day_cursor->format('j')); ?>
+                                            </div>
 
-                                </tr>
+                                            <?php if (!empty($day_events)): ?>
 
-                            <?php else: ?>
+                                                <?php
+                                                $due_count = 0;
+                                                $scheduled_count = 0;
 
-                                <?php foreach ($coaches as $coach): ?>
+                                                foreach ($day_events as $event) {
+                                                    if ($event['type'] === 'due') {
+                                                        $due_count++;
+                                                    } else {
+                                                        $scheduled_count++;
+                                                    }
+                                                }
+                                                ?>
 
-                                    <tr>
+                                                <button
+                                                    type="button"
+                                                    class="calendar-count"
+                                                    onclick="openDateSchedules('<?php echo e($date_key); ?>')"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#dateSchedulesModal">
 
-                                        <td>
+                                                    <span class="count-number">
+                                                        <?php echo count($day_events); ?>
+                                                    </span>
 
-                                            <strong>
+                                                    <span>
+                                                        Schedules
+                                                        <br>
+                                                        <small>
+                                                            <?php echo $due_count; ?> Due / <?php echo $scheduled_count; ?> Set
+                                                        </small>
+                                                    </span>
 
-                                                <?php echo date('d M Y', strtotime($coach['next_inspection_date'])); ?>
+                                                </button>
 
-                                            </strong>
+                                            <?php endif; ?>
 
-                                        </td>
+                                        </div>
 
-                                        <td>
+                                        <?php $day_cursor->modify('+1 day'); ?>
 
-                                            <strong>
+                                    <?php endwhile; ?>
 
-                                                <?php echo e($coach['coach_no']); ?>
+                                </div>
 
-                                            </strong>
+                            </div>
 
-                                        </td>
+                        <?php endforeach; ?>
 
-                                        <td>
-
-                                            <strong>
-
-                                                <?php echo e($coach['train_no'] ?: 'Detached'); ?>
-
-                                            </strong>
-
-                                            <br>
-
-                                            <?php echo e($coach['train_name'] ?: '-'); ?>
-
-                                        </td>
-
-                                        <td>
-
-                                            <?php echo e($coach['coach_type']); ?>
-
-                                        </td>
-
-                                        <td>
-
-                                            <button
-                                                type="button"
-                                                class="btn btn-sm btn-primary"
-	                                                onclick="openScheduleModal(
-                                                    '<?php echo e($coach['coach_id']); ?>',
-	                                                    '<?php echo e($coach['train_info_id']); ?>',
-	                                                    '<?php echo e($coach['coach_no']); ?>',
-	                                                    '<?php echo e($coach['next_inspection_date']); ?>'
-                                                )"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#scheduleModal">
-
-                                                Create Schedule
-
-                                            </button>
-
-                                        </td>
-
-                                    </tr>
-
-                                <?php endforeach; ?>
-
-                            <?php endif; ?>
-
-                            </tbody>
-
-                        </table>
-
-                    </div>
+                    <?php endif; ?>
 
                 </div>
 
             </div>
 
         </div>
+    </div>
 
-        <div class="col-lg-5">
+</main>
 
-            <div class="content-card">
+</div>
 
-                <div class="card-header">
+<div class="modal fade"
+     id="dateSchedulesModal"
+     tabindex="-1">
 
-                    <h5>
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
 
-                        <i class="bi bi-clock-history"></i>
+        <div class="modal-content border-0 shadow-lg">
 
-                        Recent Schedules
+            <div class="modal-header text-white" style="background-color: #61a2cb;">
 
+                <div>
+
+                    <h5 class="modal-title mb-1">
+                        <i class="bi bi-list-check me-2"></i>
+                        Date Schedules
                     </h5>
 
-                </div>
-
-                <div class="card-body">
-
-                    <div class="table-wrapper">
-
-                        <table class="table table-hover">
-
-                            <thead>
-
-                            <tr>
-
-                                <th>Coach</th>
-                                <th>Auditor</th>
-                                <th>Date</th>
-                                <th>Priority</th>
-
-                            </tr>
-
-                            </thead>
-
-                            <tbody>
-
-                            <?php if (empty($recent_schedules)): ?>
-
-                                <tr>
-
-                                    <td colspan="4"
-                                        class="text-center text-muted py-4">
-
-                                        No schedules created yet.
-
-                                    </td>
-
-                                </tr>
-
-                            <?php else: ?>
-
-                                <?php foreach ($recent_schedules as $schedule): ?>
-
-                                    <tr>
-
-                                        <td>
-
-                                            <strong>
-
-                                                <?php echo e($schedule['coach_no']); ?>
-
-                                            </strong>
-
-                                            <br>
-
-                                            <?php echo e($schedule['train_no']); ?>
-
-                                        </td>
-
-                                        <td>
-
-                                            <?php 
-                                            echo e(
-                                                !empty($schedule['full_name'])
-                                                ? $schedule['full_name']
-                                                : $schedule['user_name']
-                                            ); 
-                                            ?>
-
-                                        </td>
-
-                                        <td>
-
-                                            <?php 
-                                            echo $schedule['assignment_date_time'] 
-                                                ? date('d M Y h:i A', strtotime($schedule['assignment_date_time']))
-                                                : '-'; 
-                                            ?>
-
-                                        </td>
-
-                                        <td>
-
-                                            <?php
-                                            $priority_class =
-                                                ($schedule['priority'] === 'High')
-                                                ? 'bg-danger'
-                                                : 'bg-info';
-                                            ?>
-
-                                            <span class="badge <?php echo $priority_class; ?>">
-
-                                                <?php echo e($schedule['priority']); ?>
-
-                                            </span>
-
-                                        </td>
-
-                                    </tr>
-
-                                <?php endforeach; ?>
-
-                            <?php endif; ?>
-
-                            </tbody>
-
-                        </table>
-
-                    </div>
+                    <small class="opacity-75"
+                           id="dateSchedulesTitle">
+                    </small>
 
                 </div>
+
+                <button type="button"
+                        class="btn-close btn-close-white"
+                        data-bs-dismiss="modal"></button>
+
+            </div>
+
+            <div class="modal-body p-4">
+
+                <div id="dateSchedulesList"></div>
 
             </div>
 
         </div>
 
     </div>
-
-</main>
 
 </div>
 
@@ -1095,6 +1297,95 @@ if ($stmt) {
 
 <script>
 
+const calendarEvents = <?php echo json_encode($calendar_event_payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, function (char) {
+        return {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        }[char];
+    });
+}
+
+function openDateSchedules(dateKey) {
+    const events = calendarEvents[dateKey] || [];
+    const title = document.getElementById('dateSchedulesTitle');
+    const list = document.getElementById('dateSchedulesList');
+    const formattedDate = new Date(dateKey + 'T00:00:00').toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+    });
+
+    title.textContent = formattedDate + ' - ' + events.length + ' schedule(s)';
+
+    if (!events.length) {
+        list.innerHTML = '<div class="text-center text-muted py-4">No schedules found.</div>';
+        return;
+    }
+
+    list.innerHTML = events.map(function (event, index) {
+        if (event.type === 'due') {
+            return `
+                <div class="schedule-list-item">
+                    <div>
+                        <div class="schedule-list-title">${escapeHtml(event.coach_no)}</div>
+                        <div class="schedule-list-meta">${escapeHtml(event.train_no)} &middot; Due for scheduling</div>
+                    </div>
+                    <button type="button"
+                            class="btn btn-sm btn-primary js-create-schedule"
+                            data-event-index="${index}">
+                        Create
+                    </button>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="schedule-list-item is-scheduled">
+                <div>
+                    <div class="schedule-list-title">${escapeHtml(event.coach_no)}</div>
+                    <div class="schedule-list-meta">
+                        ${escapeHtml(event.train_no)}
+                        ${event.time ? '&middot; ' + escapeHtml(event.time) : ''}
+                        ${event.auditor ? '&middot; ' + escapeHtml(event.auditor) : ''}
+                    </div>
+                </div>
+                <span class="badge bg-secondary">${escapeHtml(event.status || 'Scheduled')}</span>
+            </div>
+        `;
+    }).join('');
+
+    list.querySelectorAll('.js-create-schedule').forEach(function (button) {
+        button.addEventListener('click', function () {
+            const event = events[Number(button.dataset.eventIndex)];
+            selectDueSchedule(event);
+        });
+    });
+}
+
+function selectDueSchedule(event) {
+    const dateSchedulesModalElement = document.getElementById('dateSchedulesModal');
+    const dateSchedulesModal = bootstrap.Modal.getInstance(dateSchedulesModalElement);
+    const showScheduleModal = function () {
+        openScheduleModal(event.coach_id, event.train_info_id, event.coach_no, event.date);
+
+        const scheduleModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('scheduleModal'));
+        scheduleModal.show();
+    };
+
+    if (dateSchedulesModal) {
+        dateSchedulesModalElement.addEventListener('hidden.bs.modal', showScheduleModal, { once: true });
+        dateSchedulesModal.hide();
+    } else {
+        showScheduleModal();
+    }
+}
+
 function openScheduleModal(coachId, trainInfoId, coachNo, nextDueDate) {
     document.getElementById('coachId').value = coachId;
     document.getElementById('trainInfoId').value = trainInfoId;
@@ -1120,8 +1411,3 @@ function openScheduleModal(coachId, trainInfoId, coachNo, nextDueDate) {
 <?php
 $conn->close();
 ?>
-
-
-
-
-

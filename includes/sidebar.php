@@ -13,11 +13,12 @@
     <ul class="sidebar-menu">
         <li><a href="<?php echo $base_path; ?>index.php"><i class="bi bi-speedometer2"></i><span>Dashboard</span></a></li>
         <li><a href="<?php echo $base_path; ?>manufacturers.php"><i class="bi bi-building"></i><span> Add OEM / Manufacturers</span></a></li>
-        <li><a href="<?php echo $base_path; ?>inventory.php"><i class="bi bi-boxes"></i><span> Add Components</span></a></li>
-        <li><a href="<?php echo $base_path; ?>inventory-entry.php"><i class="bi bi-clipboard-plus"></i><span>FDSS/FSDS</span></a></li>
-                <li><a href="<?php echo $base_path; ?>coaches.php"><i class="bi bi-box-seam"></i><span> Coaches</span></a></li>
+                        <li><a href="<?php echo $base_path; ?>coaches.php"><i class="bi bi-box-seam"></i><span> Coaches</span></a></li>
        
         <li><a href="<?php echo $base_path; ?>trains.php"><i class="bi bi-train-freight-front"></i><span> Trains</span></a></li>
+        <li><a href="<?php echo $base_path; ?>inventory.php"><i class="bi bi-boxes"></i><span> Add Inventory</span></a></li>
+        <li><a href="<?php echo $base_path; ?>fdss_fsds_inventory.php"><i class="bi bi-clipboard-plus"></i><span>FDSS/FSDS</span></a></li>
+
 
          <li><a href="<?php echo $base_path; ?>auditors.php"><i class="bi bi-person-badge"></i><span> Auditors</span></a></li>
         <li><a href="<?php echo $base_path; ?>inspection-schedule.php"><i class="bi bi-calendar-check"></i><span>create Schedule</span></a></li>
