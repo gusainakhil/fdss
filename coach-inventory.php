@@ -25,6 +25,7 @@ if ($train_info_id <= 0) {
 $message = '';
 $message_type = '';
 $unit_has_use_status = false;
+$unit_has_inventory_parameter_id = false;
 
 function e($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
@@ -33,6 +34,11 @@ function e($value) {
 $use_status_check = $conn->query("SHOW COLUMNS FROM fdds_inventory_unit LIKE 'use_status'");
 if ($use_status_check && $use_status_check->num_rows > 0) {
     $unit_has_use_status = true;
+}
+
+$parameter_column_check = $conn->query("SHOW COLUMNS FROM fdds_inventory_unit LIKE 'inventory_parameter_id'");
+if ($parameter_column_check && $parameter_column_check->num_rows > 0) {
+    $unit_has_inventory_parameter_id = true;
 }
 
 /*
@@ -218,14 +224,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $message = "Selected inventory unit not found.";
                     $message_type = "danger";
                 } else {
-                    $insert_query = "INSERT INTO fdss_coach_inventory
-                        (coach_id, inventory_unit_id, user_id, status)
-                        VALUES (?, ?, ?, ?)";
+                    $conn->begin_transaction();
 
-                    $stmt = $conn->prepare($insert_query);
-                    $stmt->bind_param("iiis", $coach['coach_id'], $inventory_unit_id, $user_id, $status);
+                    try {
+                        $insert_query = "INSERT INTO fdss_coach_inventory
+                            (coach_id, inventory_unit_id, user_id, status)
+                            VALUES (?, ?, ?, ?)";
 
-                    if ($stmt->execute()) {
+                        $stmt = $conn->prepare($insert_query);
+                        $stmt->bind_param("iiis", $coach['coach_id'], $inventory_unit_id, $user_id, $status);
+
+                        if (!$stmt->execute()) {
+                            throw new Exception($stmt->error ?: "Error assigning inventory.");
+                        }
+
+                        $stmt->close();
+
                         if ($unit_has_use_status) {
                             $use_update_query = "UPDATE fdds_inventory_unit SET use_status = 1 WHERE unit_id = ? AND user_id = ?";
                             $use_update_stmt = $conn->prepare($use_update_query);
@@ -234,14 +248,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $use_update_stmt->close();
                         }
 
+                        $linked_assigned_count = 0;
+
+                        if ($unit_has_inventory_parameter_id) {
+                            $linked_query = "SELECT iu.unit_id
+                                             FROM fdds_inventory_unit iu
+                                             LEFT JOIN fdss_coach_inventory ci
+                                                ON ci.inventory_unit_id = iu.unit_id
+                                                AND ci.user_id = iu.user_id
+                                             WHERE iu.inventory_parameter_id = ?
+                                             AND iu.user_id = ?
+                                             AND ci.id IS NULL";
+
+                            if ($unit_has_use_status) {
+                                $linked_query .= " AND iu.use_status = 0";
+                            }
+
+                            $linked_stmt = $conn->prepare($linked_query);
+                            $linked_stmt->bind_param("ii", $inventory_unit_id, $user_id);
+                            $linked_stmt->execute();
+                            $linked_result = $linked_stmt->get_result();
+
+                            $linked_unit_ids = [];
+                            while ($linked_row = $linked_result->fetch_assoc()) {
+                                $linked_unit_ids[] = (int) $linked_row['unit_id'];
+                            }
+
+                            $linked_stmt->close();
+
+                            if (!empty($linked_unit_ids)) {
+                                $linked_insert_stmt = $conn->prepare($insert_query);
+
+                                if ($unit_has_use_status) {
+                                    $linked_use_update_stmt = $conn->prepare($use_update_query);
+                                }
+
+                                foreach ($linked_unit_ids as $linked_unit_id) {
+                                    $linked_insert_stmt->bind_param("iiis", $coach['coach_id'], $linked_unit_id, $user_id, $status);
+
+                                    if (!$linked_insert_stmt->execute()) {
+                                        throw new Exception($linked_insert_stmt->error ?: "Error assigning linked parameter inventory.");
+                                    }
+
+                                    if ($unit_has_use_status) {
+                                        $linked_use_update_stmt->bind_param("ii", $linked_unit_id, $user_id);
+                                        $linked_use_update_stmt->execute();
+                                    }
+
+                                    $linked_assigned_count++;
+                                }
+
+                                $linked_insert_stmt->close();
+
+                                if ($unit_has_use_status) {
+                                    $linked_use_update_stmt->close();
+                                }
+                            }
+                        }
+
+                        $conn->commit();
+
                         $message = "Inventory assigned successfully!";
+                        if ($linked_assigned_count > 0) {
+                            $message .= " {$linked_assigned_count} linked parameter unit(s) assigned automatically.";
+                        }
                         $message_type = "success";
-                    } else {
-                        $message = "Error assigning inventory.";
+                    } catch (Exception $e) {
+                        $conn->rollback();
+                        $message = $e->getMessage();
                         $message_type = "danger";
                     }
-
-                    $stmt->close();
                 }
 
                 $unit_check_stmt->close();
@@ -1158,7 +1234,7 @@ inventoryItemId.addEventListener('change', function () {
 document.getElementById('inventoryModal')
     .addEventListener('hidden.bs.modal', resetInventoryForm);
 
-filterInventoryUnits();
+filterInventoryUnits(); 
 
 </script>
 

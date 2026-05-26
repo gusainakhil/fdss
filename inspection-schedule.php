@@ -616,95 +616,48 @@ if ($stmt) {
 
 if ($schedule_has_inspection_type && !empty($coaches)) {
     foreach ($coaches as $index => $coach) {
-        $coaches[$index]['inspection_type_total'] = 0;
-        $coaches[$index]['inspection_type_counts'] = [];
-        $coaches[$index]['inspection_type_history'] = [];
+        $coaches[$index]['inspection_type_last_dates'] = [
+            '1_month' => 'NA',
+            '2_month' => 'NA',
+            '3_month' => 'NA',
+        ];
 
         if ($schedule_uses_coach_id) {
-            $type_count_query = "SELECT Inspection_Type, COUNT(*) AS total
-                                 FROM fdss_coach_schedule
-                                 WHERE user_id = ?
-                                 AND coach_id = ?
-                                 AND Inspection_Type IS NOT NULL
-                                 AND Inspection_Type != ''
-                                 AND Inspection_Type != 'Round Trip'
-                                 GROUP BY Inspection_Type
-                                 ORDER BY total DESC, Inspection_Type ASC";
+            $type_date_query = "SELECT Inspection_Type, MAX(DATE(assignment_date_time)) AS last_inspection_date
+                                FROM fdss_coach_schedule
+                                WHERE user_id = ?
+                                AND coach_id = ?
+                                AND Inspection_Type IN ('1_month', '2_month', '3_month')
+                                GROUP BY Inspection_Type";
         } else {
-            $type_count_query = "SELECT Inspection_Type, COUNT(*) AS total
-                                 FROM fdss_coach_schedule
-                                 WHERE user_id = ?
-                                 AND coach_no = ?
-                                 AND Inspection_Type IS NOT NULL
-                                 AND Inspection_Type != ''
-                                 AND Inspection_Type != 'Round Trip'
-                                 GROUP BY Inspection_Type
-                                 ORDER BY total DESC, Inspection_Type ASC";
+            $type_date_query = "SELECT Inspection_Type, MAX(DATE(assignment_date_time)) AS last_inspection_date
+                                FROM fdss_coach_schedule
+                                WHERE user_id = ?
+                                AND coach_no = ?
+                                AND Inspection_Type IN ('1_month', '2_month', '3_month')
+                                GROUP BY Inspection_Type";
         }
 
-        $type_count_stmt = $conn->prepare($type_count_query);
+        $type_date_stmt = $conn->prepare($type_date_query);
 
-        if ($type_count_stmt) {
+        if ($type_date_stmt) {
             if ($schedule_uses_coach_id) {
-                $type_count_stmt->bind_param("ii", $user_id, $coach['coach_id']);
+                $type_date_stmt->bind_param("ii", $user_id, $coach['coach_id']);
             } else {
-                $type_count_stmt->bind_param("is", $user_id, $coach['coach_no']);
+                $type_date_stmt->bind_param("is", $user_id, $coach['coach_no']);
             }
 
-            $type_count_stmt->execute();
-            $type_count_result = $type_count_stmt->get_result();
+            $type_date_stmt->execute();
+            $type_date_result = $type_date_stmt->get_result();
 
-            while ($type_row = $type_count_result->fetch_assoc()) {
-                $type_total = (int) $type_row['total'];
-                $coaches[$index]['inspection_type_total'] += $type_total;
-                $coaches[$index]['inspection_type_counts'][] = [
-                    'type' => $type_row['Inspection_Type'],
-                    'total' => $type_total,
-                ];
+            while ($type_row = $type_date_result->fetch_assoc()) {
+                if (!empty($type_row['last_inspection_date'])) {
+                    $coaches[$index]['inspection_type_last_dates'][$type_row['Inspection_Type']] =
+                        date('d M Y', strtotime($type_row['last_inspection_date']));
+                }
             }
 
-            $type_count_stmt->close();
-        }
-
-        if ($schedule_uses_coach_id) {
-            $type_history_query = "SELECT Inspection_Type, assignment_date_time
-                                   FROM fdss_coach_schedule
-                                   WHERE user_id = ?
-                                   AND coach_id = ?
-                                   AND Inspection_Type IS NOT NULL
-                                   AND Inspection_Type != ''
-                                   AND Inspection_Type != 'Round Trip'
-                                   ORDER BY assignment_date_time DESC, schedule_id DESC
-                                   LIMIT 10";
-        } else {
-            $type_history_query = "SELECT Inspection_Type, assignment_date_time
-                                   FROM fdss_coach_schedule
-                                   WHERE user_id = ?
-                                   AND coach_no = ?
-                                   AND Inspection_Type IS NOT NULL
-                                   AND Inspection_Type != ''
-                                   AND Inspection_Type != 'Round Trip'
-                                   ORDER BY assignment_date_time DESC, schedule_id DESC
-                                   LIMIT 10";
-        }
-
-        $type_history_stmt = $conn->prepare($type_history_query);
-
-        if ($type_history_stmt) {
-            if ($schedule_uses_coach_id) {
-                $type_history_stmt->bind_param("ii", $user_id, $coach['coach_id']);
-            } else {
-                $type_history_stmt->bind_param("is", $user_id, $coach['coach_no']);
-            }
-
-            $type_history_stmt->execute();
-            $type_history_result = $type_history_stmt->get_result();
-
-            while ($history_row = $type_history_result->fetch_assoc()) {
-                $coaches[$index]['inspection_type_history'][] = $history_row;
-            }
-
-            $type_history_stmt->close();
+            $type_date_stmt->close();
         }
     }
 }
@@ -934,7 +887,7 @@ if ($stmt) {
                                 <th>Coach No.</th>
                                 <th>Train</th>
                                 <th>Coach Type</th>
-                                <th>Inspection Type Count</th>
+                                <th>Last Inspection</th>
                                 <th>Action</th>
 
                             </tr>
@@ -1008,50 +961,27 @@ if ($stmt) {
 
                                                 <span class="text-muted">-</span>
 
-                                            <?php elseif (empty($coach['inspection_type_total'])): ?>
-
-                                                <span class="text-muted">
-                                                    No non-Round Trip inspections
-                                                </span>
-
                                             <?php else: ?>
 
-                                                <div class="fw-semibold mb-1">
-                                                    Total:
-                                                    <?php echo e($coach['inspection_type_total']); ?>
-                                                </div>
+                                                <?php
+                                                $last_dates = $coach['inspection_type_last_dates'] ?? [
+                                                    '1_month' => 'NA',
+                                                    '2_month' => 'NA',
+                                                    '3_month' => 'NA',
+                                                ];
+                                                ?>
 
-                                                <div class="d-flex flex-wrap gap-1 mb-2">
-
-                                                    <?php foreach ($coach['inspection_type_counts'] as $type_count): ?>
-
-                                                        <span class="badge bg-info text-dark">
-                                                            <?php echo e($type_count['type']); ?>:
-                                                            <?php echo e($type_count['total']); ?>
-                                                        </span>
-
-                                                    <?php endforeach; ?>
-
-                                                </div>
-
-                                                <div class="small text-muted">
-                                                    Latest 10
-                                                </div>
-
-                                                <?php foreach ($coach['inspection_type_history'] as $history): ?>
-
-                                                    <div class="small">
-                                                        <?php echo e($history['Inspection_Type']); ?>
-                                                        <span class="text-muted">
-                                                            <?php
-                                                            echo !empty($history['assignment_date_time'])
-                                                                ? date('d M Y', strtotime($history['assignment_date_time']))
-                                                                : '-';
-                                                            ?>
-                                                        </span>
-                                                    </div>
-
-                                                <?php endforeach; ?>
+                                                <p class="small mb-0 lh-base">
+                                                    <strong>1 month</strong>
+                                                    Date:
+                                                    <?php echo e($last_dates['1_month']); ?>;
+                                                    <strong>2 month</strong>
+                                                    Date:
+                                                    <?php echo e($last_dates['2_month']); ?>;
+                                                    <strong>3 month</strong>
+                                                    Date:
+                                                    <?php echo e($last_dates['3_month']); ?>
+                                                </p>
 
                                             <?php endif; ?>
 

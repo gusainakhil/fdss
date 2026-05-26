@@ -15,19 +15,26 @@ $user_id = (int)$_SESSION['user_id'];
 $item_code_prefix = 'INV-WC-';
 $allowed_categories = ['FDSS', 'FSDS', 'Primary', 'Secondary'];
 
-function generate_next_item_code(mysqli $conn, int $user_id, string $prefix): string
+if (isset($_GET['parameter_added'])) {
+    $added_count = max(0, (int) $_GET['parameter_added']);
+    if ($added_count > 0) {
+        $message = $added_count . " parameter row(s) added successfully!";
+        $message_type = "success";
+    }
+}
+
+function generate_next_item_code(mysqli $conn, string $prefix): string
 {
     $like_pattern = $prefix . '%';
     $regex_pattern = '^' . preg_quote($prefix, '/') . '[0-9]+$';
     $query = "SELECT MAX(CAST(SUBSTRING(item_code, ?) AS UNSIGNED)) AS last_number
               FROM fdss_Inventory_Management
-              WHERE user_id = ?
-              AND item_code LIKE ?
+              WHERE item_code LIKE ?
               AND item_code REGEXP ?";
 
     $stmt = $conn->prepare($query);
     $start_position = strlen($prefix) + 1;
-    $stmt->bind_param("iiss", $start_position, $user_id, $like_pattern, $regex_pattern);
+    $stmt->bind_param("iss", $start_position, $like_pattern, $regex_pattern);
     $stmt->execute();
     $result = $stmt->get_result();
     $row = $result->fetch_assoc();
@@ -42,20 +49,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'add_inventory') {
-        $item_code = generate_next_item_code($conn, $user_id, $item_code_prefix);
+        $item_code = trim($_POST['item_code'] ?? '');
         $item_name = trim($_POST['item_name'] ?? '');
         $status = $_POST['status'] ?? 'Working';
         $category = $_POST['category'] ?? 'Primary';
         $category = in_array($category, $allowed_categories, true) ? $category : 'FDSS';
         $remarks = trim($_POST['remarks'] ?? '');
 
-        if ($item_name === '') {
+        if ($item_code === '' || $item_name === '') {
             $message = "Please fill all required fields.";
             $message_type = "danger";
         } else {
-            $check_query = "SELECT inventory_id FROM fdss_Inventory_Management WHERE user_id = ? AND item_code = ?";
+            $check_query = "SELECT inventory_id FROM fdss_Inventory_Management WHERE item_code = ?";
             $check_stmt = $conn->prepare($check_query);
-            $check_stmt->bind_param("is", $user_id, $item_code);
+            $check_stmt->bind_param("s", $item_code);
             $check_stmt->execute();
             $check_result = $check_stmt->get_result();
 
@@ -74,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $item_name,
                     $status,
                     $category,
-                    $user_id,
+                    $user_id, 
                     $remarks
                 );
 
@@ -166,6 +173,7 @@ $inventory_items = [];
 $query = "SELECT inventory_id, item_code, item_name, status, category, user_id, last_updated, remarks, created_at, updated_at
           FROM fdss_Inventory_Management
           WHERE user_id = ?
+          AND category IN ('FDSS', 'FSDS', 'Primary', 'Secondary')
           ORDER BY inventory_id DESC";
 
 $stmt = $conn->prepare($query);
@@ -178,7 +186,7 @@ while ($row = $result->fetch_assoc()) {
 }
 
 $stmt->close();
-$next_item_code = generate_next_item_code($conn, $user_id, $item_code_prefix);
+$next_item_code = generate_next_item_code($conn, $item_code_prefix);
 ?>
 
 <!DOCTYPE html>
@@ -204,8 +212,14 @@ $next_item_code = generate_next_item_code($conn, $user_id, $item_code_prefix);
             <div>
                 <h1>Inventory Management</h1>
                 <p class="page-header-subtitle">Manage stock levels and track components</p>
+                <p class="text-danger mb-0">
+                   Firstly, add the parameters of FDSS and FSDS <a href="add-parameter.php" class="text-danger fw-semibold">click here</a>
+                </p>
             </div>
             <div class="page-header-actions">
+                <a href="add-parameter.php" class="btn btn-outline-primary">
+                    <i class="bi bi-sliders"></i> Add Parameter
+                </a>
                 <button class="btn btn-primary" id="addInventoryBtn" data-bs-toggle="modal" data-bs-target="#inventoryModal">
                     <i class="bi bi-plus-circle"></i> Add Inventory
                 </button>
@@ -249,9 +263,14 @@ $next_item_code = generate_next_item_code($conn, $user_id, $item_code_prefix);
                             </tr>
                         <?php else: ?>
                             <?php foreach ($inventory_items as $item): ?>
+                                <?php
+                                    $details_page = in_array($item['category'], ['FDSS', 'FSDS'], true)
+                                        ? 'add-fsds-fdds-inventory.php'
+                                        : 'inventory-item-details.php';
+                                ?>
                                 <tr>
                                     <td>
-                                        <a href="inventory-item-details.php?inventory_id=<?php echo htmlspecialchars($item['inventory_id']); ?>" target="_blank" class="text-decoration-none">
+                                        <a href="<?php echo htmlspecialchars($details_page); ?>?inventory_id=<?php echo htmlspecialchars($item['inventory_id']); ?>" target="_blank" class="text-decoration-none">
                                             <?php echo htmlspecialchars($item['item_code']); ?>
                                         </a>
                                     </td>
@@ -321,7 +340,6 @@ $next_item_code = generate_next_item_code($conn, $user_id, $item_code_prefix);
                             id="itemCode"
                             name="item_code"
                             value="<?php echo htmlspecialchars($next_item_code); ?>"
-                            readonly
                             required
                         >
                     </div>

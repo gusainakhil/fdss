@@ -33,17 +33,26 @@ $manufacturers = [];
 $existing_units = [];
 $trains = [];
 $coaches = [];
+$parameter_items = [];
 $message = '';
 $message_type = '';
+$item_category = '';
+$parameter_category = '';
 $unit_has_use_status = false;
+$unit_has_inventory_parameter_id = false;
 
 $use_status_check = $conn->query("SHOW COLUMNS FROM fdds_inventory_unit LIKE 'use_status'");
 if ($use_status_check && $use_status_check->num_rows > 0) {
     $unit_has_use_status = true;
 }
 
+$parameter_column_check = $conn->query("SHOW COLUMNS FROM fdds_inventory_unit LIKE 'inventory_parameter_id'");
+if ($parameter_column_check && $parameter_column_check->num_rows > 0) {
+    $unit_has_inventory_parameter_id = true;
+}
+
 if ($inventory_id > 0) {
-    $query = "SELECT inventory_id, item_code, item_name, quantity, category, status, remarks
+    $query = "SELECT inventory_id, item_code, item_name, quantity, category, status, remarks, user_id
               FROM fdss_Inventory_Management
               WHERE inventory_id = ? AND user_id = ?";
     $stmt = $conn->prepare($query);
@@ -54,9 +63,39 @@ if ($inventory_id > 0) {
     $stmt->close();
 }
 
-if ($item && in_array(strtoupper(trim((string) $item['category'])), ['FDSS', 'FSDS'], true)) {
-    header('Location: add-fsds-fdds-inventory.php?inventory_id=' . urlencode((string) $inventory_id));
-    exit;
+if ($item) {
+    $item_category = strtoupper(trim((string) $item['category']));
+}
+
+if ($item && in_array($item_category, ['FDSS', 'FSDS'], true)) {
+    $parameter_category = $item_category === 'FDSS' ? 'FDSSPARA' : 'FSDSPARA';
+    $parameter_query = "SELECT inventory_id, item_code, item_name
+                        FROM fdss_Inventory_Management
+                        WHERE user_id = ? AND UPPER(TRIM(category)) = ?
+                        ORDER BY inventory_id ASC";
+    $parameter_stmt = $conn->prepare($parameter_query);
+    $parameter_stmt->bind_param('is', $user_id, $parameter_category);
+    $parameter_stmt->execute();
+    $parameter_result = $parameter_stmt->get_result();
+    while ($parameter_row = $parameter_result->fetch_assoc()) {
+        $parameter_items[] = $parameter_row;
+    }
+    $parameter_stmt->close();
+
+    if (empty($parameter_items)) {
+        $fallback_parameter_query = "SELECT inventory_id, item_code, item_name
+                                     FROM fdss_Inventory_Management
+                                     WHERE UPPER(TRIM(category)) = ?
+                                     ORDER BY inventory_id ASC";
+        $fallback_parameter_stmt = $conn->prepare($fallback_parameter_query);
+        $fallback_parameter_stmt->bind_param('s', $parameter_category);
+        $fallback_parameter_stmt->execute();
+        $fallback_parameter_result = $fallback_parameter_stmt->get_result();
+        while ($parameter_row = $fallback_parameter_result->fetch_assoc()) {
+            $parameter_items[] = $parameter_row;
+        }
+        $fallback_parameter_stmt->close();
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_units') {
@@ -66,11 +105,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $newWarrantyExpires = $_POST['new_warranty_expire'] ?? [];
     $newManufacturerIds = $_POST['new_manufacturer'] ?? [];
     $newCoachIds = $_POST['new_coach_id'] ?? [];
+    $newParameterIds = $_POST['new_parameter_id'] ?? [];
+    $newParameterParentRows = $_POST['new_parameter_parent_row'] ?? [];
+    $newParameterSerials = $_POST['new_parameter_serial'] ?? [];
+    $newParameterModels = $_POST['new_parameter_model'] ?? [];
+    $newParameterPurchases = $_POST['new_parameter_purchase'] ?? [];
+    $newParameterWarrantyExpires = $_POST['new_parameter_warranty_expire'] ?? [];
+    $newParameterManufacturerIds = $_POST['new_parameter_manufacturer'] ?? [];
+    $newParameterCoachIds = $_POST['new_parameter_coach_id'] ?? [];
 
     if ($inventory_id > 0) {
         $conn->begin_transaction();
         try {
-            if ($unit_has_use_status) {
+            if (!$unit_has_inventory_parameter_id && !empty($parameter_items)) {
+                throw new Exception('inventory_parameter_id column was not found in fdds_inventory_unit.');
+            }
+
+            if ($unit_has_inventory_parameter_id && $unit_has_use_status) {
+                $insertQuery = "INSERT INTO fdds_inventory_unit
+                    (inventory_id, user_id, inventory_parameter_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes, use_status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            } elseif ($unit_has_inventory_parameter_id) {
+                $insertQuery = "INSERT INTO fdds_inventory_unit
+                    (inventory_id, user_id, inventory_parameter_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            } elseif ($unit_has_use_status) {
                 $insertQuery = "INSERT INTO fdds_inventory_unit
                     (inventory_id, user_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes, use_status)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
@@ -84,7 +143,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $assignStmt = $conn->prepare("INSERT INTO fdss_coach_inventory (coach_id, inventory_unit_id, user_id, status) VALUES (?, ?, ?, 'Active')");
 
             $newRowCount = 0;
+            $newParameterRowCount = 0;
             $assignedRowCount = 0;
+            $validParentRows = [];
+            $parentUnitIds = [];
+            $validParameterIds = array_flip(array_map('intval', array_column($parameter_items, 'inventory_id')));
             for ($i = 0; $i < count($newSerials); $i++) {
                 $serial = trim($newSerials[$i] ?? '');
                 $model = trim($newModels[$i] ?? '');
@@ -109,21 +172,87 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                         $coachCheckResult->free();
                     }
 
-                    if ($unit_has_use_status) {
+                    $inventoryParameterId = null;
+                    if ($unit_has_inventory_parameter_id && $unit_has_use_status) {
+                        $insertStmt->bind_param('iiissssisi', $inventory_id, $user_id, $inventoryParameterId, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $useStatus);
+                    } elseif ($unit_has_inventory_parameter_id) {
+                        $insertStmt->bind_param('iiissssis', $inventory_id, $user_id, $inventoryParameterId, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note);
+                    } elseif ($unit_has_use_status) {
                         $insertStmt->bind_param('iissssisi', $inventory_id, $user_id, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $useStatus);
                     } else {
                         $insertStmt->bind_param('iissssis', $inventory_id, $user_id, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note);
                     }
-                    $insertStmt->execute();
+                    if (!$insertStmt->execute()) {
+                        throw new Exception($insertStmt->error ?: 'Unable to save unit.');
+                    }
                     $newUnitId = (int) $conn->insert_id;
+                    $validParentRows[$i] = true;
+                    $parentUnitIds[$i] = $newUnitId;
 
                     if ($coachId > 0) {
                         $assignStmt->bind_param('iii', $coachId, $newUnitId, $user_id);
-                        $assignStmt->execute();
+                        if (!$assignStmt->execute()) {
+                            throw new Exception($assignStmt->error ?: 'Unable to assign unit to coach.');
+                        }
                         $assignedRowCount++;
                     }
 
                     $newRowCount++;
+                }
+            }
+
+            if ($unit_has_inventory_parameter_id) {
+                for ($i = 0; $i < count($newParameterIds); $i++) {
+                    $parameterId = (int) ($newParameterIds[$i] ?? 0);
+                    $parentRowIndex = (int) ($newParameterParentRows[$i] ?? -1);
+                    $serial = trim($newParameterSerials[$i] ?? '');
+                    $model = trim($newParameterModels[$i] ?? '');
+                    $purchase = trim($newParameterPurchases[$i] ?? '');
+                    $warrantyExpire = trim($newParameterWarrantyExpires[$i] ?? '');
+                    $manufacturerId = (int) ($newParameterManufacturerIds[$i] ?? 0) ?: null;
+                    $note = '';
+                    $coachId = (int) ($newParameterCoachIds[$i] ?? 0);
+                    $useStatus = $coachId > 0 ? 1 : 0;
+
+                    if ($parameterId <= 0 || !isset($validParameterIds[$parameterId]) || empty($validParentRows[$parentRowIndex]) || empty($parentUnitIds[$parentRowIndex])) {
+                        continue;
+                    }
+
+                    $parentUnitId = $parentUnitIds[$parentRowIndex];
+
+                    if ($coachId > 0) {
+                        $coachCheckStmt->bind_param('ii', $coachId, $user_id);
+                        $coachCheckStmt->execute();
+                        $coachCheckResult = $coachCheckStmt->get_result();
+
+                        if ($coachCheckResult->num_rows === 0) {
+                            throw new Exception('Selected coach was not found.');
+                        }
+
+                        $coachCheckResult->free();
+                    }
+
+                    if ($unit_has_use_status) {
+                        $insertStmt->bind_param('iiissssisi', $parameterId, $user_id, $parentUnitId, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $useStatus);
+                    } else {
+                        $insertStmt->bind_param('iiissssis', $parameterId, $user_id, $parentUnitId, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note);
+                    }
+
+                    if (!$insertStmt->execute()) {
+                        throw new Exception($insertStmt->error ?: 'Unable to save parameter unit.');
+                    }
+
+                    $newUnitId = (int) $conn->insert_id;
+
+                    if ($coachId > 0) {
+                        $assignStmt->bind_param('iii', $coachId, $newUnitId, $user_id);
+                        if (!$assignStmt->execute()) {
+                            throw new Exception($assignStmt->error ?: 'Unable to assign parameter unit to coach.');
+                        }
+                        $assignedRowCount++;
+                    }
+
+                    $newParameterRowCount++;
                 }
             }
             $assignStmt->close();
@@ -131,7 +260,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $insertStmt->close();
 
             // Update total quantity
-            $getTotalQuery = "SELECT COUNT(*) as total FROM fdds_inventory_unit WHERE inventory_id = ? AND user_id = ?";
+            $parameter_filter = $unit_has_inventory_parameter_id ? " AND inventory_parameter_id IS NULL" : "";
+            $getTotalQuery = "SELECT COUNT(*) as total FROM fdds_inventory_unit WHERE inventory_id = ? AND user_id = ?" . $parameter_filter;
             $getTotalStmt = $conn->prepare($getTotalQuery);
             $getTotalStmt->bind_param('ii', $inventory_id, $user_id);
             $getTotalStmt->execute();
@@ -146,15 +276,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $updateInventoryStmt->close();
 
             $conn->commit();
-            $message = "Added {$newRowCount} new unit(s) successfully. {$assignedRowCount} assigned to coach. Total count: {$totalCount}.";
+            $message = "Added {$newRowCount} new unit(s) and {$newParameterRowCount} parameter unit(s) successfully. {$assignedRowCount} assigned to coach. Total count: {$totalCount}.";
             $message_type = 'success';
             
             // Reload existing units
             $existing_units = [];
             if ($item) {
+                $parameter_filter = $unit_has_inventory_parameter_id ? " AND inventory_parameter_id IS NULL" : "";
                 $unit_query = "SELECT unit_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes
                                FROM fdds_inventory_unit
                                WHERE inventory_id = ? AND user_id = ?
+                               $parameter_filter
                                ORDER BY unit_id ASC";
                 $unit_stmt = $conn->prepare($unit_query);
                 $unit_stmt->bind_param('ii', $inventory_id, $user_id);
@@ -201,9 +333,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
             // Reload existing units
             $existing_units = [];
             if ($item) {
+                $parameter_filter = $unit_has_inventory_parameter_id ? " AND inventory_parameter_id IS NULL" : "";
                 $unit_query = "SELECT unit_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes
                                FROM fdds_inventory_unit
                                WHERE inventory_id = ? AND user_id = ?
+                               $parameter_filter
                                ORDER BY unit_id ASC";
                 $unit_stmt = $conn->prepare($unit_query);
                 $unit_stmt->bind_param('ii', $inventory_id, $user_id);
@@ -252,6 +386,7 @@ if ($item) {
                        ON t.train_info_id = c.train_info_id
                        AND t.user_id = iu.user_id
                    WHERE iu.inventory_id = ? AND iu.user_id = ?
+                   " . ($unit_has_inventory_parameter_id ? "AND iu.inventory_parameter_id IS NULL" : "") . "
                    ORDER BY (ci.coach_id IS NULL) DESC, iu.unit_id ASC";
     $unit_stmt = $conn->prepare($unit_query);
     $unit_stmt->bind_param('ii', $inventory_id, $user_id);
@@ -323,6 +458,13 @@ function e($value) {
             min-width: 150px;
         }
         .unit-table th {
+            white-space: nowrap;
+        }
+        .parameter-unit-table input,
+        .parameter-unit-table select {
+            min-width: 150px;
+        }
+        .parameter-unit-table th {
             white-space: nowrap;
         }
         .unit-row-count {
@@ -455,6 +597,117 @@ function e($value) {
                             <tbody id="unitEntriesBody"></tbody>
                         </table>
                     </div>
+
+                    <?php
+                        $inline_category = strtoupper(trim((string) ($item['category'] ?? '')));
+                        $inline_parameter_category = $inline_category === 'FDSS' ? 'FDSSPARA' : ($inline_category === 'FSDS' ? 'FSDSPARA' : '');
+                        $inline_parameter_items = $parameter_items;
+
+                        if ($inline_parameter_category !== '' && empty($inline_parameter_items)) {
+                            $inline_parameter_query = "SELECT inventory_id, item_code, item_name
+                                                       FROM fdss_Inventory_Management
+                                                       WHERE UPPER(TRIM(category)) = ?
+                                                       ORDER BY inventory_id ASC";
+                            $inline_parameter_stmt = $conn->prepare($inline_parameter_query);
+                            $inline_parameter_stmt->bind_param('s', $inline_parameter_category);
+                            $inline_parameter_stmt->execute();
+                            $inline_parameter_result = $inline_parameter_stmt->get_result();
+                            while ($inline_parameter_row = $inline_parameter_result->fetch_assoc()) {
+                                $inline_parameter_items[] = $inline_parameter_row;
+                            }
+                            $inline_parameter_stmt->close();
+                        }
+                    ?>
+                    <?php if ($inline_parameter_category !== ''): ?>
+                        <div class="mt-4" id="parameterUnitSection">
+                            <h6 class="mb-3">
+                                <i class="bi bi-list-check"></i>
+                                <?php echo e($inline_parameter_category); ?> Parameters
+                            </h6>
+
+                            <?php if (empty($inline_parameter_items)): ?>
+                                <div class="alert alert-warning mb-0">
+                                    No <?php echo e($inline_parameter_category); ?> parameters found. Add parameters from Add Parameter page first.
+                                </div>
+                            <?php else: ?>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-hover parameter-unit-table">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th class="unit-row-count">Unit #</th>
+                                                <th>Parameter</th>
+                                                <th>Serial Number</th>
+                                                <th>Model Number</th>
+                                                <th>Purchase Date</th>
+                                                <th>Warranty Expire</th>
+                                                <th>Train</th>
+                                                <th>Coach</th>
+                                                <th>OEM</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="parameterEntriesBody">
+                                            <?php foreach ($inline_parameter_items as $inline_parameter): ?>
+                                                <tr>
+                                                    <td class="align-middle">1</td>
+                                                    <td class="align-middle">
+                                                        <strong><?php echo e($inline_parameter['item_name']); ?></strong>
+                                                        <div class="small text-muted"><?php echo e($inline_parameter['item_code']); ?></div>
+                                                    </td>
+                                                    <td colspan="7" class="text-muted">Fill Add New Units row to auto-fill this parameter.</td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php /*
+                    <?php if (in_array($item_category, ['FDSS', 'FSDS'], true)): ?>
+                    <div class="mt-4" id="parameterUnitSection">
+                        <h6 class="mb-3">
+                            <i class="bi bi-list-check"></i>
+                            <?php echo e($parameter_category); ?> Parameters
+                        </h6>
+                        <?php if (empty($parameter_items)): ?>
+                            <div class="alert alert-warning mb-0">
+                                No <?php echo e($parameter_category); ?> parameters found. Add parameters from Add Parameter page first.
+                            </div>
+                        <?php else: ?>
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-hover parameter-unit-table">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="unit-row-count">Unit #</th>
+                                            <th>Parameter</th>
+                                            <th>Serial Number</th>
+                                            <th>Model Number</th>
+                                            <th>Purchase Date</th>
+                                            <th>Warranty Expire</th>
+                                            <th>Train</th>
+                                            <th>Coach</th>
+                                            <th>OEM</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="parameterEntriesBody">
+                                        <?php foreach ($parameter_items as $parameter): ?>
+                                            <tr>
+                                                <td class="align-middle">1</td>
+                                                <td class="align-middle">
+                                                    <strong><?php echo e($parameter['item_name']); ?></strong>
+                                                    <div class="small text-muted"><?php echo e($parameter['item_code']); ?></div>
+                                                </td>
+                                                <td colspan="7" class="text-muted">Fill Add New Units row to auto-fill this parameter.</td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                    <?php endif; ?>
+                    */ ?>
 
                     <div class="mt-3 d-flex justify-content-between align-items-center gap-2">
                         <div>
@@ -656,8 +909,17 @@ function e($value) {
             'label' => trim($coach['coach_no'] . ($coach['coach_type'] ? ' - ' . $coach['coach_type'] : '')),
         ];
     }, $coaches), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+    const parameterItems = <?php echo json_encode(array_map(function ($parameter) {
+        return [
+            'id' => (string) $parameter['inventory_id'],
+            'code' => $parameter['item_code'],
+            'name' => $parameter['item_name'],
+        ];
+    }, $parameter_items), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 
     const unitEntriesBody = document.getElementById('unitEntriesBody');
+    const parameterEntriesBody = document.getElementById('parameterEntriesBody');
+    const parameterUnitSection = document.getElementById('parameterUnitSection');
     const scrollTopBtn = document.getElementById('scrollTopBtn');
     const addRowBtn = document.getElementById('addRowBtn');
     const submitCountBtn = document.getElementById('submitCountBtn');
@@ -710,7 +972,24 @@ function e($value) {
             return html + `<option value="${escapeHtml(coach.id)}">${escapeHtml(coach.label)}</option>`;
         }, '<option value="">No coach</option>');
 
-        coachSelect.disabled = !trainValue;
+        coachSelect.disabled = false;
+
+        if (selectedCoachId) {
+            coachSelect.value = selectedCoachId;
+        }
+    }
+
+    function setParameterCoachOptions(row, selectedCoachId = '') {
+        const trainSelect = row.querySelector('.parameter-train-select');
+        const coachSelect = row.querySelector('[name="new_parameter_coach_id[]"]');
+        const trainValue = trainSelect ? trainSelect.value : '';
+        const matchingCoaches = getCoachesForTrain(trainValue);
+
+        coachSelect.innerHTML = matchingCoaches.reduce((html, coach) => {
+            return html + `<option value="${escapeHtml(coach.id)}">${escapeHtml(coach.label)}</option>`;
+        }, '<option value="">No coach</option>');
+
+        coachSelect.disabled = false;
 
         if (selectedCoachId) {
             coachSelect.value = selectedCoachId;
@@ -735,24 +1014,25 @@ function e($value) {
         const trainOptionsHtml = createTrainOptions();
 
         const row = document.createElement('tr');
+        row.dataset.rowIndex = String(index - 1);
         row.innerHTML = `
             <td class="align-middle">${index}</td>
-            <td><input type="text" class="form-control form-control-sm" name="new_serial[]" placeholder="Serial #" value="${serialValue}"></td>
-            <td><input type="text" class="form-control form-control-sm" name="new_model[]" placeholder="Model #" value="${modelValue}"></td>
-            <td><input type="date" class="form-control form-control-sm" name="new_purchase[]" value="${purchaseValue}"></td>
-            <td><input type="date" class="form-control form-control-sm" name="new_warranty_expire[]" value="${warrantyValue}"></td>
+            <td><input type="text" class="form-control form-control-sm unit-serial-input" name="new_serial[]" placeholder="Serial #" value="${serialValue}"></td>
+            <td><input type="text" class="form-control form-control-sm unit-model-input" name="new_model[]" placeholder="Model #" value="${modelValue}"></td>
+            <td><input type="date" class="form-control form-control-sm unit-purchase-input" name="new_purchase[]" value="${purchaseValue}"></td>
+            <td><input type="date" class="form-control form-control-sm unit-warranty-input" name="new_warranty_expire[]" value="${warrantyValue}"></td>
             <td>
                 <select class="form-select form-select-sm unit-train-select" name="new_train_info_id[]">
                     ${trainOptionsHtml}
                 </select>
             </td>
             <td>
-                <select class="form-select form-select-sm" name="new_coach_id[]" disabled>
+                <select class="form-select form-select-sm unit-coach-select" name="new_coach_id[]">
                     <option value="">No coach</option>
                 </select>
             </td>
             <td>
-                <select class="form-select form-select-sm" name="new_manufacturer[]">
+                <select class="form-select form-select-sm unit-manufacturer-select" name="new_manufacturer[]">
                     ${optionsHtml}
                 </select>
             </td>
@@ -766,17 +1046,124 @@ function e($value) {
         if (select && manufacturerValue) {
             select.value = manufacturerValue;
         }
-        row.querySelector('.unit-train-select')?.addEventListener('change', () => {
-            setCoachOptions(row);
-        });
         setCoachOptions(row);
         return row;
+    }
+
+    function createParameterRow(parentIndex, displayIndex, parameter, parentRow) {
+        const optionsHtml = createManufacturerOptions();
+        const trainOptionsHtml = createTrainOptions();
+        const row = document.createElement('tr');
+        row.dataset.parentIndex = String(parentIndex);
+        row.innerHTML = `
+            <td class="align-middle">${displayIndex}</td>
+            <td class="align-middle">
+                <strong>${escapeHtml(parameter.name)}</strong>
+                <div class="small text-muted">${escapeHtml(parameter.code)}</div>
+                <input type="hidden" name="new_parameter_parent_row[]" value="${escapeHtml(parentIndex)}">
+                <input type="hidden" name="new_parameter_id[]" value="${escapeHtml(parameter.id)}">
+            </td>
+            <td><input type="text" class="form-control form-control-sm parameter-serial-input" name="new_parameter_serial[]" placeholder="Serial #"></td>
+            <td><input type="text" class="form-control form-control-sm parameter-model-input" name="new_parameter_model[]" placeholder="Model #"></td>
+            <td><input type="date" class="form-control form-control-sm parameter-purchase-input" name="new_parameter_purchase[]"></td>
+            <td><input type="date" class="form-control form-control-sm parameter-warranty-input" name="new_parameter_warranty_expire[]"></td>
+            <td>
+                <select class="form-select form-select-sm parameter-train-select" name="new_parameter_train_info_id[]">
+                    ${trainOptionsHtml}
+                </select>
+            </td>
+            <td>
+                <select class="form-select form-select-sm parameter-coach-select" name="new_parameter_coach_id[]">
+                    <option value="">No coach</option>
+                </select>
+            </td>
+            <td>
+                <select class="form-select form-select-sm parameter-manufacturer-select" name="new_parameter_manufacturer[]">
+                    ${optionsHtml}
+                </select>
+            </td>
+        `;
+        row.querySelector('.parameter-train-select')?.addEventListener('change', () => {
+            setParameterCoachOptions(row);
+        });
+        syncParameterRow(row, parentRow);
+        return row;
+    }
+
+    function getParentRowValues(parentRow) {
+        return {
+            serial: parentRow.querySelector('.unit-serial-input')?.value || '',
+            model: parentRow.querySelector('.unit-model-input')?.value || '',
+            purchase: parentRow.querySelector('.unit-purchase-input')?.value || '',
+            warranty: parentRow.querySelector('.unit-warranty-input')?.value || '',
+            train: parentRow.querySelector('.unit-train-select')?.value || '',
+            coach: parentRow.querySelector('.unit-coach-select')?.value || '',
+            manufacturer: parentRow.querySelector('.unit-manufacturer-select')?.value || '',
+        };
+    }
+
+    function syncParameterRow(parameterRow, parentRow) {
+        const values = getParentRowValues(parentRow);
+
+        parameterRow.querySelector('.parameter-serial-input').value = values.serial;
+        parameterRow.querySelector('.parameter-model-input').value = values.model;
+        parameterRow.querySelector('.parameter-purchase-input').value = values.purchase;
+        parameterRow.querySelector('.parameter-warranty-input').value = values.warranty;
+        parameterRow.querySelector('.parameter-train-select').value = values.train;
+        parameterRow.querySelector('.parameter-manufacturer-select').value = values.manufacturer;
+        setParameterCoachOptions(parameterRow, values.coach);
+    }
+
+    function syncParameterRowsForParent(parentIndex) {
+        if (!parameterEntriesBody || parameterItems.length === 0) {
+            return;
+        }
+
+        const parentRow = unitEntriesBody.querySelector(`tr[data-row-index="${parentIndex}"]`);
+        if (!parentRow) {
+            return;
+        }
+
+        parameterEntriesBody.querySelectorAll(`tr[data-parent-index="${parentIndex}"]`).forEach(row => {
+            syncParameterRow(row, parentRow);
+        });
+    }
+
+    function rebuildParameterRows() {
+        if (!parameterEntriesBody || parameterItems.length === 0) {
+            if (parameterUnitSection) {
+                parameterUnitSection.style.display = 'none';
+            }
+            return;
+        }
+
+        if (parameterUnitSection) {
+            parameterUnitSection.style.display = '';
+        }
+
+        parameterEntriesBody.innerHTML = '';
+        unitEntriesBody.querySelectorAll('tr').forEach((parentRow, rowIndex) => {
+            parentRow.dataset.rowIndex = String(rowIndex);
+            parentRow.querySelector('td:first-child').textContent = rowIndex + 1;
+
+            parameterItems.forEach(parameter => {
+                parameterEntriesBody.appendChild(createParameterRow(rowIndex, rowIndex + 1, parameter, parentRow));
+            });
+        });
+    }
+
+    function renumberUnitRows() {
+        unitEntriesBody.querySelectorAll('tr').forEach((tr, index) => {
+            tr.dataset.rowIndex = String(index);
+            tr.querySelector('td:first-child').textContent = index + 1;
+        });
     }
 
     function buildRows() {
         unitEntriesBody.innerHTML = '';
         const optionsHtml = createManufacturerOptions();
         unitEntriesBody.appendChild(createRow(1, optionsHtml));
+        rebuildParameterRows();
         updateTotalUnits();
     }
 
@@ -792,6 +1179,7 @@ function e($value) {
         unitEntriesBody.querySelectorAll('tr').forEach(row => {
             setCoachOptions(row);
         });
+        rebuildParameterRows();
     }
 
     function getRowCount() {
@@ -807,16 +1195,15 @@ function e($value) {
         const optionsHtml = createManufacturerOptions();
         const newRow = createRow(rowCount + 1, optionsHtml);
         unitEntriesBody.appendChild(newRow);
+        rebuildParameterRows();
     }
 
     function removeRow(button) {
         const row = button.closest('tr');
         if (!row) return;
         row.remove();
-        const rows = unitEntriesBody.querySelectorAll('tr');
-        rows.forEach((tr, index) => {
-            tr.querySelector('td:first-child').textContent = index + 1;
-        });
+        renumberUnitRows();
+        rebuildParameterRows();
     }
 
     function downloadCsv() {
@@ -897,6 +1284,28 @@ function e($value) {
 
     addRowBtn?.addEventListener('click', () => {
         addRow();
+    });
+
+    unitEntriesBody?.addEventListener('input', event => {
+        const row = event.target.closest('tr');
+        if (!row) {
+            return;
+        }
+
+        syncParameterRowsForParent(row.dataset.rowIndex);
+    });
+
+    unitEntriesBody?.addEventListener('change', event => {
+        const row = event.target.closest('tr');
+        if (!row) {
+            return;
+        }
+
+        if (event.target.classList.contains('unit-train-select')) {
+            setCoachOptions(row);
+        }
+
+        syncParameterRowsForParent(row.dataset.rowIndex);
     });
 
     downloadCsvBtn?.addEventListener('click', downloadCsv);
