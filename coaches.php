@@ -13,6 +13,11 @@ $user_id = (int) $_SESSION['user_id'];
 $message = '';
 $message_type = '';
 
+$type_column_check = $conn->query("SHOW COLUMNS FROM fdss_train_coach LIKE 'Type'");
+if ($type_column_check && $type_column_check->num_rows === 0) {
+    $conn->query("ALTER TABLE fdss_train_coach ADD `Type` varchar(20) DEFAULT NULL AFTER coach_type");
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -20,6 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $train_info_id = (int) ($_POST['train_info_id'] ?? 0) ?: null;
         $coach_no = trim($_POST['coach_no'] ?? '');
         $coach_type = trim($_POST['coach_type'] ?? '');
+        $type = substr(trim($_POST['type'] ?? ''), 0, 20);
         $status = $_POST['status'] ?? 'Active';
         $next_inspection_date = !empty($_POST['next_inspection_date']) ? $_POST['next_inspection_date'] : null;
 
@@ -38,11 +44,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message_type = "danger";
             } else {
                 $insert_query = "INSERT INTO fdss_train_coach 
-                    (train_info_id, coach_no, coach_type, user_id, status, next_inspection_date)
-                    VALUES (?, ?, ?, ?, ?, ?)";
+                    (train_info_id, coach_no, coach_type, `Type`, user_id, status, next_inspection_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)";
 
                 $stmt = $conn->prepare($insert_query);
-                $stmt->bind_param("ississ", $train_info_id, $coach_no, $coach_type, $user_id, $status, $next_inspection_date);
+                $stmt->bind_param("isssiss", $train_info_id, $coach_no, $coach_type, $type, $user_id, $status, $next_inspection_date);
 
                 if ($stmt->execute()) {
                     $message = "Coach added successfully!";
@@ -63,6 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $coach_id = (int) ($_POST['coach_id'] ?? 0);
         $coach_no = trim($_POST['coach_no'] ?? '');
         $coach_type = trim($_POST['coach_type'] ?? '');
+        $type = substr(trim($_POST['type'] ?? ''), 0, 20);
         $status = $_POST['status'] ?? 'Active';
         $next_inspection_date = !empty($_POST['next_inspection_date']) ? $_POST['next_inspection_date'] : null;
 
@@ -78,11 +85,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message_type = "danger";
         } else {
             $update_query = "UPDATE fdss_train_coach 
-                SET coach_no = ?, coach_type = ?, status = ?, next_inspection_date = ?
+                SET coach_no = ?, coach_type = ?, `Type` = ?, status = ?, next_inspection_date = ?
                 WHERE coach_id = ? AND user_id = ?";
 
             $stmt = $conn->prepare($update_query);
-            $stmt->bind_param("ssssii", $coach_no, $coach_type, $status, $next_inspection_date, $coach_id, $user_id);
+            $stmt->bind_param("sssssii", $coach_no, $coach_type, $type, $status, $next_inspection_date, $coach_id, $user_id);
 
             if ($stmt->execute()) {
                 $message = "Coach updated successfully!";
@@ -164,6 +171,7 @@ $query = "SELECT
             c.train_info_id,
             c.coach_no,
             c.coach_type,
+            c.`Type` AS coach_body_type,
             c.status,
             c.next_inspection_date,
             t.train_no,
@@ -363,6 +371,7 @@ function e($value) {
                             <tr>
                                 <th>Coach No.</th>
                                 <th>Coach Type</th>
+                                
                                 <th>Train Assigned</th>
                                 <th class="no-print no-export">Assign Train</th>
                                 <th>Total Components</th>
@@ -377,7 +386,7 @@ function e($value) {
                         <tbody>
                         <?php if (empty($coaches)): ?>
                             <tr>
-                                <td colspan="10" class="text-center text-muted py-4">
+                                <td colspan="11" class="text-center text-muted py-4">
                                     No coaches found. Click "Add Coach" to create one.
                                 </td>
                             </tr>
@@ -393,6 +402,7 @@ function e($value) {
                                         </a>
                                     </td>
                                     <td><?php echo e($coach['coach_type'] ?: '-'); ?></td>
+                                  
                                     <td><?php echo e($coach['train_info_id'] ? $coach['train_no'] . ' - ' . $coach['train_name'] : 'Detached'); ?></td>
                                     <td class="no-print no-export">
                                         <form method="POST" class="d-flex gap-1">
@@ -430,11 +440,12 @@ function e($value) {
                                         <button 
                                             class="btn btn-sm btn-outline-primary"
                                             onclick="editCoach(
-                                                '<?php echo e($coach['coach_id']); ?>',
-                                                '<?php echo e($coach['coach_no']); ?>',
-                                                '<?php echo e($coach['coach_type']); ?>',
-                                                '<?php echo e($coach['status']); ?>',
-                                                '<?php echo e($coach['next_inspection_date']); ?>'
+                                                <?php echo e(json_encode((string) $coach['coach_id'])); ?>,
+                                                <?php echo e(json_encode((string) $coach['coach_no'])); ?>,
+                                                <?php echo e(json_encode((string) $coach['coach_type'])); ?>,
+                                                <?php echo e(json_encode((string) $coach['coach_body_type'])); ?>,
+                                                <?php echo e(json_encode((string) $coach['status'])); ?>,
+                                                <?php echo e(json_encode((string) $coach['next_inspection_date'])); ?>
                                             )"
                                             data-bs-toggle="modal"
                                             data-bs-target="#coachModal">
@@ -473,8 +484,13 @@ function e($value) {
                 <div class="modal-body">
                     <div class="form-group mb-3">
                         <label class="form-label">Coach Number <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="coachNo" name="coach_no" placeholder="e.g., SWLWACCN12332" required>
+                        <input type="text" class="form-control" id="coachNo" name="coach_no" placeholder="e.g., 2332" required>
                     </div>
+                     <div class="form-group mb-3">
+                        <label class="form-label">Type</label>
+                        <input type="text" class="form-control" id="coachBodyType" name="type" maxlength="20" placeholder="e.g., SWLWACCN1">
+                    </div>
+
 
                     <div class="form-group mb-3">
                         <label class="form-label">Coach Type</label>
@@ -486,6 +502,7 @@ function e($value) {
                         </select>
                     </div>
 
+                   
                     <div class="form-group mb-3">
                         <label class="form-label">Status <span class="text-danger">*</span></label>
                         <select class="form-select" id="coachStatus" name="status" required>
@@ -530,6 +547,7 @@ function resetCoachForm() {
     document.getElementById('coachId').value = '';
     document.getElementById('coachNo').value = '';
     document.getElementById('coachType').value = '';
+    document.getElementById('coachBodyType').value = '';
     document.getElementById('coachStatus').value = 'Active';
     document.getElementById('nextInspectionDate').value = '';
 
@@ -538,10 +556,11 @@ function resetCoachForm() {
     submitCoachBtn.textContent = 'Add Coach';
 }
 
-function editCoach(id, coachNo, coachType, status, nextInspectionDate) {
+function editCoach(id, coachNo, coachType, coachBodyType, status, nextInspectionDate) {
     document.getElementById('coachId').value = id;
     document.getElementById('coachNo').value = coachNo;
     document.getElementById('coachType').value = coachType;
+    document.getElementById('coachBodyType').value = coachBodyType;
     document.getElementById('coachStatus').value = status;
     document.getElementById('nextInspectionDate').value = nextInspectionDate;
 
@@ -571,7 +590,7 @@ function applyCoachFilters() {
 
     rows.forEach(row => {
         const coachNoCell = row.querySelector('td:first-child');
-        const trainAssignedCell = row.querySelector('td:nth-child(3)');
+        const trainAssignedCell = row.querySelector('td:nth-child(4)');
         const coachNo = coachNoCell ? coachNoCell.textContent.trim() : '';
         const trainAssigned = trainAssignedCell ? trainAssignedCell.textContent.trim() : '';
         let matches = true;

@@ -343,6 +343,7 @@ CREATE TABLE `fdss_train_coach` (
   `train_info_id` varchar(10) DEFAULT NULL,
   `coach_no` varchar(50) NOT NULL,
   `coach_type` varchar(100) DEFAULT NULL,
+  `Type` varchar(20) DEFAULT NULL,
   `user_id` int(11) NOT NULL,
   `coach_status` enum('Detached','Intact') NOT NULL DEFAULT 'Intact',
   `status` enum('Active','Inactive') DEFAULT 'Active',
@@ -356,12 +357,12 @@ CREATE TABLE `fdss_train_coach` (
 -- Dumping data for table `fdss_train_coach`
 --
 
-INSERT INTO `fdss_train_coach` (`coach_id`, `train_info_id`, `coach_no`, `coach_type`, `user_id`, `coach_status`, `status`, `next_inspection_date`, `created_at`, `updated_at`, `schedule_status`) VALUES
-(1, '6', '22334', 'FSDS', 2, 'Intact', 'Active', '2026-06-25', '2026-05-12 08:41:48', '2026-05-19 10:28:41', 0),
-(2, '6', '44556', 'FDSS', 2, 'Intact', 'Active', '2026-05-28', '2026-05-13 06:48:51', '2026-05-19 10:28:49', 0),
-(3, '2', '77889', 'FDSS', 2, 'Intact', 'Active', '2026-06-21', '2026-05-13 08:42:22', '2026-05-19 10:59:17', 1),
-(4, '6', 'SWLWACCN121655', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-14 07:52:02', '2026-05-18 13:00:52', 0),
-(5, NULL, 'SELC55443', 'FDSS', 2, 'Intact', 'Active', '2026-05-22', '2026-05-18 10:16:35', '2026-05-18 12:31:24', 0);
+INSERT INTO `fdss_train_coach` (`coach_id`, `train_info_id`, `coach_no`, `coach_type`, `Type`, `user_id`, `coach_status`, `status`, `next_inspection_date`, `created_at`, `updated_at`, `schedule_status`) VALUES
+(1, '6', '22334', 'FSDS', NULL, 2, 'Intact', 'Active', '2026-06-25', '2026-05-12 08:41:48', '2026-05-19 10:28:41', 0),
+(2, '6', '44556', 'FDSS', NULL, 2, 'Intact', 'Active', '2026-05-28', '2026-05-13 06:48:51', '2026-05-19 10:28:49', 0),
+(3, '2', '77889', 'FDSS', NULL, 2, 'Intact', 'Active', '2026-06-21', '2026-05-13 08:42:22', '2026-05-19 10:59:17', 1),
+(4, '6', 'SWLWACCN121655', 'FSDS', 'SWLWACCN1', 2, 'Intact', 'Active', '2026-05-20', '2026-05-14 07:52:02', '2026-05-18 13:00:52', 0),
+(5, NULL, 'SELC55443', 'FDSS', NULL, 2, 'Intact', 'Active', '2026-05-22', '2026-05-18 10:16:35', '2026-05-18 12:31:24', 0);
 
 -- --------------------------------------------------------
 
