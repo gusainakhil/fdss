@@ -154,7 +154,7 @@ $stmt->close();
                         <thead>
                             <tr>
                                 <th>Company Name</th>
-                                <th>Name</th>
+                                <th>Contact personally Name</th>
                                 <th>Mobile Number</th>
                                 <th>Email ID</th>
                                 <th>Address</th>
@@ -238,7 +238,7 @@ $stmt->close();
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Name</label>
+                        <label class="form-label">Contact personally Name</label>
                         <input type="text" class="form-control" id="name" name="name">
                     </div>
 

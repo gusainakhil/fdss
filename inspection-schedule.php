@@ -68,8 +68,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $inspection_type = $_POST['inspection_type'] ?? '1_month';
         $inspection_day_map = [
             '1_month' => 30,
-            '2_month' => 30,
             '3_month' => 30,
+            '6_month' => 30,
         ];
 
         if ($assignment_date_time !== '') {
@@ -618,8 +618,8 @@ if ($schedule_has_inspection_type && !empty($coaches)) {
     foreach ($coaches as $index => $coach) {
         $coaches[$index]['inspection_type_last_dates'] = [
             '1_month' => 'NA',
-            '2_month' => 'NA',
             '3_month' => 'NA',
+            '6_month' => 'NA',
         ];
 
         if ($schedule_uses_coach_id) {
@@ -627,14 +627,14 @@ if ($schedule_has_inspection_type && !empty($coaches)) {
                                 FROM fdss_coach_schedule
                                 WHERE user_id = ?
                                 AND coach_id = ?
-                                AND Inspection_Type IN ('1_month', '2_month', '3_month')
+                                AND Inspection_Type IN ('1_month', '2_month', '3_month', '6_month')
                                 GROUP BY Inspection_Type";
         } else {
             $type_date_query = "SELECT Inspection_Type, MAX(DATE(assignment_date_time)) AS last_inspection_date
                                 FROM fdss_coach_schedule
                                 WHERE user_id = ?
                                 AND coach_no = ?
-                                AND Inspection_Type IN ('1_month', '2_month', '3_month')
+                                AND Inspection_Type IN ('1_month', '2_month', '3_month', '6_month')
                                 GROUP BY Inspection_Type";
         }
 
@@ -652,7 +652,11 @@ if ($schedule_has_inspection_type && !empty($coaches)) {
 
             while ($type_row = $type_date_result->fetch_assoc()) {
                 if (!empty($type_row['last_inspection_date'])) {
-                    $coaches[$index]['inspection_type_last_dates'][$type_row['Inspection_Type']] =
+                    $inspection_type_key = $type_row['Inspection_Type'] === '2_month'
+                        ? '6_month'
+                        : $type_row['Inspection_Type'];
+
+                    $coaches[$index]['inspection_type_last_dates'][$inspection_type_key] =
                         date('d M Y', strtotime($type_row['last_inspection_date']));
                 }
             }
@@ -749,7 +753,7 @@ if ($stmt) {
         <div>
 
             <h1>
-                Auto Inspection Schedule
+               Tentative Pending  Schedule
             </h1>
 
             <p class="page-header-subtitle">
@@ -966,8 +970,8 @@ if ($stmt) {
                                                 <?php
                                                 $last_dates = $coach['inspection_type_last_dates'] ?? [
                                                     '1_month' => 'NA',
-                                                    '2_month' => 'NA',
                                                     '3_month' => 'NA',
+                                                    '6_month' => 'NA',
                                                 ];
                                                 ?>
 
@@ -975,12 +979,12 @@ if ($stmt) {
                                                     <strong>1 month</strong>
                                                     Date:
                                                     <?php echo e($last_dates['1_month']); ?>;
-                                                    <strong>2 month</strong>
-                                                    Date:
-                                                    <?php echo e($last_dates['2_month']); ?>;
                                                     <strong>3 month</strong>
                                                     Date:
-                                                    <?php echo e($last_dates['3_month']); ?>
+                                                    <?php echo e($last_dates['3_month']); ?>;
+                                                    <strong>6 month</strong>
+                                                    Date:
+                                                    <?php echo e($last_dates['6_month']); ?>
                                                 </p>
 
                                             <?php endif; ?>
@@ -1185,12 +1189,12 @@ if ($stmt) {
                                     1 Month Inspection
                                 </option>
 
-                                <option value="2_month">
-                                    2 Month Inspection
-                                </option>
-
                                 <option value="3_month">
                                     3 Month Inspection
+                                </option>
+
+                                <option value="6_month">
+                                    6 Month Inspection
                                 </option>
 
                             </select>
@@ -1489,8 +1493,8 @@ function updateNextInspectionDate() {
     const inspectionType = document.getElementById('inspectionType');
     const dayMap = {
         '1_month': 30,
-        '2_month': 30,
         '3_month': 30,
+        '6_month': 30,
     };
 
     if (!assignmentDateTime.value) {

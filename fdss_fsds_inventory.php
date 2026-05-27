@@ -229,9 +229,9 @@ function e($value) {
                                 <th>Inventory Name</th>
                                 <th>Serial No.</th>
                                 <th>Model No.</th>
-                                <th>Train</th>
+                                <th>Train Name/NO.</th>
                                 <th>Coach No.</th>
-                                <th>Coach Type</th>
+                                <th>Equipment Type</th>
                                 <th>OEM</th>
                                 <th>Purchase Date</th>
                                 <th>Warranty Expire</th>

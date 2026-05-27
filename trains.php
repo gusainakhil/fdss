@@ -205,7 +205,11 @@ $stmt->close();
                         <?php else: ?>
                             <?php foreach ($trains as $train): ?>
                                 <tr data-id="<?php echo htmlspecialchars($train['train_info_id']); ?>">
-                                    <td><?php echo htmlspecialchars($train['train_no']); ?></td>
+                                    <td>
+                                        <a href="train-coaches.php?train_info_id=<?php echo htmlspecialchars($train['train_info_id']); ?>">
+                                            <?php echo htmlspecialchars($train['train_no']); ?>
+                                        </a>
+                                    </td>
                                     <td><?php echo htmlspecialchars($train['train_name']); ?></td>
                                     <td>
                                         <?php

@@ -10,6 +10,8 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = (int) $_SESSION['user_id'];
+$current_page = basename($_SERVER['SCRIPT_NAME']);
+$list_view_only = $current_page === 'schedule-list-view.php';
 
 function e($value)
 {
@@ -725,12 +727,38 @@ foreach ($calendar_events as $event_date => $events) {
         <div>
 
             <h1>
-                Inspection Schedule List
+                <?php echo $list_view_only ? 'Schedule List View' : 'Inspection Schedule List'; ?>
             </h1>
 
             <p class="page-header-subtitle">
                 Manage and update all coach inspection schedules.
             </p>
+
+        </div>
+
+        <div class="page-header-actions">
+
+            <?php if ($list_view_only): ?>
+
+            <a class="btn btn-primary"
+               href="schedule-list.php">
+
+                <i class="bi bi-calendar3"></i>
+                Calendar View
+
+            </a>
+
+            <?php else: ?>
+
+            <a class="btn btn-primary"
+               href="schedule-list-view.php">
+
+                <i class="bi bi-list-ul"></i>
+                List View
+
+            </a>
+
+            <?php endif; ?>
 
         </div>
 
@@ -749,6 +777,8 @@ foreach ($calendar_events as $event_date => $events) {
         </div>
 
     <?php endif; ?>
+
+    <?php if (!$list_view_only): ?>
 
     <div class="content-card mb-4">
 
@@ -859,7 +889,11 @@ foreach ($calendar_events as $event_date => $events) {
 
     </div>
 
-    <div class="content-card">
+    <?php endif; ?>
+
+    <?php if ($list_view_only): ?>
+
+    <div class="content-card" id="scheduleListView">
 
         <div class="card-header">
 
@@ -925,7 +959,7 @@ foreach ($calendar_events as $event_date => $events) {
 
                     </button>
 
-                    <a href="schedule-list.php"
+                    <a href="<?php echo e($current_page); ?>"
                        class="btn btn-outline-secondary">
 
                         Reset
@@ -945,7 +979,7 @@ foreach ($calendar_events as $event_date => $events) {
                     <tr>
 
                         <th>Coach</th>
-                        <th>Train</th>
+                        <th>Train Name/NO.</th>
                         <th>Auditor</th>
                         <th>Assignment Date & Time</th>
                         <th>Status</th>
@@ -1118,6 +1152,8 @@ foreach ($calendar_events as $event_date => $events) {
         </div>
 
     </div>
+
+    <?php endif; ?>
 
 </main>
 

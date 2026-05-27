@@ -369,8 +369,8 @@ function e($value) {
                     <table class="table table-hover" id="coachesTable">
                         <thead>
                             <tr>
-                                <th>Coach No.</th>
-                                <th>Coach Type</th>
+                                <th>Coach No. & Type</th>
+                                <th>Equipment Type</th>
                                 
                                 <th>Train Assigned</th>
                                 <th class="no-print no-export">Assign Train</th>
@@ -398,7 +398,7 @@ function e($value) {
                                             class=""
                                             href="coach-inventory.php?train_info_id=<?php echo e($coach['train_info_id']); ?>&coach_no=<?php echo urlencode($coach['coach_no']); ?>">
                                             <?php echo e($coach['coach_no']); ?>
-                                           
+                                            (<strong><?php echo e($coach['coach_body_type'] ?: '-'); ?></strong>)
                                         </a>
                                     </td>
                                     <td><?php echo e($coach['coach_type'] ?: '-'); ?></td>
@@ -487,15 +487,15 @@ function e($value) {
                         <input type="text" class="form-control" id="coachNo" name="coach_no" placeholder="e.g., 2332" required>
                     </div>
                      <div class="form-group mb-3">
-                        <label class="form-label">Type</label>
+                        <label class="form-label">  Type</label>
                         <input type="text" class="form-control" id="coachBodyType" name="type" maxlength="20" placeholder="e.g., SWLWACCN1">
                     </div>
 
 
                     <div class="form-group mb-3">
-                        <label class="form-label">Coach Type</label>
+                        <label class="form-label">Select Equipment </label>
                         <select class="form-select" id="coachType" name="coach_type">
-                            <option value="">Select Type</option>
+                            <option value="">Select Equipment </option>
                             <option value="FDSS">FDSS</option>
                             <option value="FSDS">FSDS</option>
                             
@@ -503,17 +503,18 @@ function e($value) {
                     </div>
 
                    
+                
+
                     <div class="form-group mb-3">
+                        <label class="form-label">Next Inspection Date</label>
+                        <input type="date" class="form-control" id="nextInspectionDate" name="next_inspection_date" required>
+                    </div>
+                        <div class="form-group mb-3">
                         <label class="form-label">Status <span class="text-danger">*</span></label>
                         <select class="form-select" id="coachStatus" name="status" required>
                             <option value="Active">Active</option>
                             <option value="Inactive">Inactive</option>
                         </select>
-                    </div>
-
-                    <div class="form-group mb-3">
-                        <label class="form-label">Next Inspection Date</label>
-                        <input type="date" class="form-control" id="nextInspectionDate" name="next_inspection_date">
                     </div>
                 </div>
 

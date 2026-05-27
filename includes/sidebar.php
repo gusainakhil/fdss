@@ -14,16 +14,19 @@
         <li><a href="<?php echo $base_path; ?>index.php"><i class="bi bi-speedometer2"></i><span>Dashboard</span></a></li>
         <li><a href="<?php echo $base_path; ?>manufacturers.php"><i class="bi bi-building"></i><span> Add OEM / Manufacturers</span></a></li>
                         <li><a href="<?php echo $base_path; ?>coaches.php"><i class="bi bi-box-seam"></i><span> Coaches</span></a></li>
+                       
+
        
         <li><a href="<?php echo $base_path; ?>trains.php"><i class="bi bi-train-freight-front"></i><span> Trains</span></a></li>
+         <li><a href="<?php echo $base_path; ?>add-parameter.php"><i class="bi bi-gear"></i><span>Add FDSS/FSDS Parameters</span></a></li>
         <li><a href="<?php echo $base_path; ?>inventory.php"><i class="bi bi-boxes"></i><span> Add Inventory</span></a></li>
         <li><a href="<?php echo $base_path; ?>fdss_fsds_inventory.php"><i class="bi bi-clipboard-plus"></i><span>FDSS/FSDS</span></a></li>
 
 
          <li><a href="<?php echo $base_path; ?>auditors.php"><i class="bi bi-person-badge"></i><span> Auditors</span></a></li>
-        <li><a href="<?php echo $base_path; ?>inspection-schedule.php"><i class="bi bi-calendar-check"></i><span>create Schedule</span></a></li>
+        <li><a href="<?php echo $base_path; ?>inspection-schedule.php"><i class="bi bi-calendar-check"></i><span>Create Schedule</span></a></li>
         <li><a href="<?php echo $base_path; ?>schedule-list.php"><i class="bi bi-calendar-range"></i><span>View Schedule</span></a></li>
-        <li><a href="<?php echo $base_path; ?>reports.php"><i class="bi bi-sliders"></i><span>Coach Wise Reports</span></a></li>
+        <li><a href="<?php echo $base_path; ?>reports.php"><i class="bi bi-sliders"></i><span>Attention Reports</span></a></li>
         <li><a href="<?php echo $base_path; ?>full-reports.php"><i class="bi bi-sliders"></i><span>Status of FDSS / FSDS</span></a></li>
         <!-- Reports Dropdown -->
         <!-- <li class="sidebar-dropdown">

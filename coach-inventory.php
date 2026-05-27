@@ -51,6 +51,7 @@ $coach_query = "SELECT
                     c.coach_id,
                     c.coach_no,
                     c.coach_type,
+                    c.`Type` AS coach_body_type,
                     c.status,
                     c.train_info_id,
                     t.train_no,
@@ -603,6 +604,11 @@ $list_query = "SELECT
 $list_query .= "\n               ORDER BY ci.id DESC";
 
 $stmt = $conn->prepare($list_query);
+
+if (!$stmt) {
+    die("Inventory List SQL Error: " . $conn->error);
+}
+
 $stmt->bind_param("ii", $coach['coach_id'], $user_id);
 
 $stmt->execute();
@@ -722,7 +728,7 @@ $stmt->close();
 
                         <p>
                             <strong>
-                                <?php echo e($coach['coach_no']); ?>
+                                <?php echo e($coach['coach_no']); ?> - <?php echo e($coach['coach_body_type'] ?: '-'); ?>
                             </strong>
                         </p>
 
@@ -758,7 +764,7 @@ $stmt->close();
 
                     <div class="quick-box">
 
-                        <h6>Coach Type</h6>
+                        <h6>Equipment Type</h6>
 
                         <p>
                             <strong>
@@ -804,7 +810,7 @@ $stmt->close();
 
                 Coach Components Installed In
 
-                <?php echo e($coach['coach_no']); ?>
+                <?php echo e($coach['coach_no']); ?> - <?php echo e($coach['coach_body_type'] ?: '-'); ?>
 
             </h5>
 
@@ -820,7 +826,7 @@ $stmt->close();
 
                     <tr>
 
-                        <th>Component Name</th>
+                        <th>Inventory Name</th>
                         <th>OEM</th>
                         <th>Model Number</th>
                         <th>Serial Number</th>
