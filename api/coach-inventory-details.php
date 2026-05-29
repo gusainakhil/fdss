@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $auditor_id = (int) ($input['auditor_id'] ?? 0);
 $schedule_id = (int) ($input['schedule_id'] ?? 0);
 $coach_inventory_id = (int) ($input['coach_inventory_id'] ?? 0);
-$unit_id = (int) ($input['unit_id'] ?? 0);
+$unit_id = (int) ($input['unit_id'] ?? ($input['inventory_unit_id'] ?? 0));
 
 if ($auditor_id <= 0 || $schedule_id <= 0 || ($coach_inventory_id <= 0 && $unit_id <= 0)) {
     send_json(422, [
@@ -130,17 +130,10 @@ if (!$schedule) {
     ]);
 }
 
-$inventory_filter = 'ci.id = ?';
-$inventory_filter_id = $coach_inventory_id;
-
-if ($coach_inventory_id <= 0) {
-    $inventory_filter = 'iu.unit_id = ?';
-    $inventory_filter_id = $unit_id;
-}
-
 $inventory_query = "SELECT
                         ci.id AS coach_inventory_id,
                         ci.status AS assignment_status,
+                        ci.warranty_replace_status,
                         ci.created_at AS assigned_at,
                         ci.updated_at AS assignment_updated_at,
                         iu.unit_id,
@@ -169,7 +162,10 @@ $inventory_query = "SELECT
                         ON m.manufacturer_id = iu.manufacturer_id
                      WHERE ci.coach_id = ?
                      AND ci.user_id = ?
-                     AND $inventory_filter
+                     AND (
+                        ci.id = ?
+                        OR iu.unit_id = ?
+                     )
                      LIMIT 1";
 
 $inventory_stmt = $conn->prepare($inventory_query);
@@ -184,7 +180,10 @@ if (!$inventory_stmt) {
 $coach_id = (int) $schedule['coach_id'];
 $owner_user_id = (int) $schedule['user_id'];
 
-$inventory_stmt->bind_param('iii', $coach_id, $owner_user_id, $inventory_filter_id);
+$lookup_coach_inventory_id = $coach_inventory_id;
+$lookup_unit_id = $unit_id > 0 ? $unit_id : $coach_inventory_id;
+
+$inventory_stmt->bind_param('iiii', $coach_id, $owner_user_id, $lookup_coach_inventory_id, $lookup_unit_id);
 $inventory_stmt->execute();
 $inventory_result = $inventory_stmt->get_result();
 $inventory = $inventory_result->fetch_assoc();
@@ -233,6 +232,7 @@ send_json(200, [
     'inventory' => [
         'coach_inventory_id' => (int) $inventory['coach_inventory_id'],
         'assignment_status' => $inventory['assignment_status'],
+        'warranty_replace_status' => $inventory['warranty_replace_status'],
         'assigned_at' => $inventory['assigned_at'],
         'assignment_updated_at' => $inventory['assignment_updated_at'],
         'unit' => [

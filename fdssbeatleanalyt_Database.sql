@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: May 19, 2026 at 04:57 PM
+-- Generation Time: May 29, 2026 at 05:43 PM
 -- Server version: 10.11.17-MariaDB
 -- PHP Version: 8.4.21
 
@@ -67,12 +67,14 @@ INSERT INTO `fdds_coach_inspection` (`inspection_id`, `schedule_id`, `train_info
 CREATE TABLE `fdds_inventory_unit` (
   `unit_id` int(11) NOT NULL,
   `inventory_id` int(11) NOT NULL,
+  `inventory_parameter_id` int(11) DEFAULT NULL,
   `user_id` int(11) NOT NULL,
   `serial_number` varchar(255) DEFAULT NULL,
   `model_number` varchar(255) DEFAULT NULL,
   `purchase_date` date DEFAULT NULL,
   `Warranty_expire` datetime DEFAULT NULL,
   `manufacturer_id` int(11) DEFAULT NULL,
+  `use_status` int(11) NOT NULL DEFAULT 0,
   `notes` text DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
@@ -82,22 +84,57 @@ CREATE TABLE `fdds_inventory_unit` (
 -- Dumping data for table `fdds_inventory_unit`
 --
 
-INSERT INTO `fdds_inventory_unit` (`unit_id`, `inventory_id`, `user_id`, `serial_number`, `model_number`, `purchase_date`, `Warranty_expire`, `manufacturer_id`, `notes`, `created_at`, `updated_at`) VALUES
-(1, 7, 2, '12344', '1234', '2026-05-12', '2026-05-21 00:00:00', 5, 'na', '2026-05-15 16:12:59', '2026-05-18 11:00:09'),
-(4, 6, 2, '123456', '3463', '2026-05-12', NULL, 3, 'na', '2026-05-15 16:21:08', '2026-05-15 16:21:08'),
-(5, 6, 2, '12424', '2444', '2026-05-13', NULL, 3, 'na', '2026-05-15 16:21:08', '2026-05-15 16:21:08'),
-(6, 7, 2, '1234', '232', '2026-05-20', NULL, 5, 'f', '2026-05-15 16:40:54', '2026-05-15 16:40:54'),
-(7, 7, 2, '5432', '4543', '2026-05-12', NULL, 5, 'f', '2026-05-15 16:40:54', '2026-05-15 16:40:54'),
-(8, 7, 2, 'Y67JKGH87', '13321', '2026-05-06', '2026-05-07 00:00:00', 4, 'g', '2026-05-15 16:41:16', '2026-05-19 10:39:52'),
-(9, 7, 2, '22', '1234', '2026-05-14', '2026-05-27 00:00:00', 1, 'g', '2026-05-15 16:41:16', '2026-05-18 11:05:29'),
-(10, 7, 2, 'qwef', 'ert', '2026-04-29', '2026-05-22 00:00:00', 5, 'f', '2026-05-15 16:41:55', '2026-05-18 11:05:41'),
-(11, 7, 2, 'we', 'etewrt', '2026-05-06', NULL, 5, 'f', '2026-05-15 16:41:55', '2026-05-15 16:41:55'),
-(12, 7, 2, 'wewe', 'erter', '2026-05-27', NULL, 5, 'f', '2026-05-15 16:41:55', '2026-05-15 16:41:55'),
-(13, 7, 2, '124132', '223443', '2026-05-14', NULL, 5, 'ff', '2026-05-15 16:44:13', '2026-05-15 16:44:13'),
-(14, 7, 2, '24', '3435435', '2026-06-02', NULL, 5, 'gg', '2026-05-15 16:44:13', '2026-05-15 16:44:13'),
-(15, 7, 2, '12345', '123', '2026-05-18', '2026-05-19 00:00:00', 1, 'wefewf', '2026-05-18 09:50:49', '2026-05-18 09:50:49'),
-(16, 7, 2, '432443', '3456546546', '2026-05-04', '2026-05-19 00:00:00', 2, 'ff', '2026-05-18 11:02:11', '2026-05-18 11:02:11'),
-(17, 7, 2, 'gg55', '234', '2026-05-18', '2026-06-06 00:00:00', 5, 'bb', '2026-05-18 11:05:18', '2026-05-18 11:05:18');
+INSERT INTO `fdds_inventory_unit` (`unit_id`, `inventory_id`, `inventory_parameter_id`, `user_id`, `serial_number`, `model_number`, `purchase_date`, `Warranty_expire`, `manufacturer_id`, `use_status`, `notes`, `created_at`, `updated_at`) VALUES
+(1, 7, NULL, 2, '12344', '1234', '2026-05-12', '2026-05-21 00:00:00', 5, 0, 'na', '2026-05-15 16:12:59', '2026-05-25 08:19:57'),
+(4, 6, NULL, 2, '123456', '3463', '2026-05-12', NULL, 3, 0, 'na', '2026-05-15 16:21:08', '2026-05-25 08:19:59'),
+(5, 6, NULL, 2, '12424', '2444', '2026-05-13', NULL, 3, 1, 'na', '2026-05-15 16:21:08', '2026-05-25 08:20:03'),
+(6, 7, NULL, 2, '1234', '232', '2026-05-20', NULL, 5, 0, 'f', '2026-05-15 16:40:54', '2026-05-25 08:20:01'),
+(7, 7, NULL, 2, '5432', '4543', '2026-05-12', NULL, 5, 0, 'f', '2026-05-15 16:40:54', '2026-05-25 08:20:07'),
+(8, 7, NULL, 2, 'Y67JKGH87', '13321', '2026-05-06', '2026-05-07 00:00:00', 4, 0, 'g', '2026-05-15 16:41:16', '2026-05-25 08:21:12'),
+(9, 7, NULL, 2, '22', '1234', '2026-05-14', '2026-05-27 00:00:00', 1, 0, 'g', '2026-05-15 16:41:16', '2026-05-25 08:20:05'),
+(10, 7, NULL, 2, 'qwef', 'ert', '2026-04-29', '2026-05-22 00:00:00', 5, 0, 'f', '2026-05-15 16:41:55', '2026-05-25 08:21:15'),
+(11, 7, NULL, 2, 'we', 'etewrt', '2026-05-06', NULL, 5, 0, 'f', '2026-05-15 16:41:55', '2026-05-25 08:21:17'),
+(12, 7, NULL, 2, 'wewe', 'erter', '2026-05-27', NULL, 5, 0, 'f', '2026-05-15 16:41:55', '2026-05-25 08:21:22'),
+(13, 7, NULL, 2, '124132', '223443', '2026-05-14', NULL, 5, 0, 'ff', '2026-05-15 16:44:13', '2026-05-25 08:21:25'),
+(14, 7, NULL, 2, '24', '3435435', '2026-06-02', NULL, 5, 0, 'gg', '2026-05-15 16:44:13', '2026-05-25 08:21:19'),
+(15, 7, NULL, 2, '12345', '123', '2026-05-18', '2026-05-19 00:00:00', 1, 0, 'wefewf', '2026-05-18 09:50:49', '2026-05-25 08:21:24'),
+(16, 7, NULL, 2, '432443', '3456546546', '2026-05-04', '2026-05-19 00:00:00', 2, 0, 'ff', '2026-05-18 11:02:11', '2026-05-25 08:21:27'),
+(17, 7, NULL, 2, 'gg55', '234', '2026-05-18', '2026-06-06 00:00:00', 5, 0, 'bb', '2026-05-18 11:05:18', '2026-05-25 08:21:30'),
+(18, 9, NULL, 2, '23456', '98765', '2026-04-06', '2026-08-07 00:00:00', 5, 0, 'nc', '2026-05-22 17:38:45', '2026-05-25 08:21:29'),
+(19, 10, NULL, 2, 'ABC123', 'XXCXER', '2026-05-01', '2026-10-31 00:00:00', 2, 0, 'na', '2026-05-23 06:10:30', '2026-05-25 08:21:34'),
+(20, 10, NULL, 2, 'ABG567H', 'ADH7658', '2026-05-22', '2026-05-30 00:00:00', 5, 1, '', '2026-05-23 07:32:42', '2026-05-25 08:21:32'),
+(21, 10, NULL, 2, 'ADBHTY', 'ADBHYT', '2026-06-06', '2026-08-28 00:00:00', 3, 1, '', '2026-05-23 07:32:43', '2026-05-25 08:21:36'),
+(22, 10, NULL, 2, 'KHJFT6435', 'VFD6578H', '2026-05-23', '2026-05-30 00:00:00', 1, 0, '', '2026-05-23 07:32:43', '2026-05-25 08:21:39'),
+(23, 10, NULL, 2, 'POHJFT6435', 'YUH5678', '2026-05-30', '2026-10-09 00:00:00', 3, 1, '', '2026-05-23 07:44:45', '2026-05-25 08:21:38'),
+(24, 9, NULL, 2, '12345', '223344', '2026-05-25', '2026-07-25 00:00:00', NULL, 0, '', '2026-05-25 08:41:53', '2026-05-25 08:41:53'),
+(25, 9, NULL, 2, 'kkkkkk', '11kkh', '2026-05-25', '2026-05-29 00:00:00', 2, 0, '', '2026-05-25 08:50:14', '2026-05-25 08:50:14'),
+(26, 9, NULL, 2, 'er', '23', '2026-05-25', '2026-05-30 00:00:00', NULL, 0, '', '2026-05-25 09:00:08', '2026-05-25 09:00:08'),
+(27, 9, NULL, 2, '112233', '445566', '2026-06-01', '2026-05-25 00:00:00', 2, 1, '', '2026-05-25 09:20:28', '2026-05-25 09:20:28'),
+(28, 9, NULL, 2, '112233', '445566', '2026-06-01', '2026-05-25 00:00:00', 2, 1, '', '2026-05-25 09:20:28', '2026-05-25 09:30:23'),
+(29, 9, NULL, 2, '112233', '445566', '2026-06-01', '2026-05-25 00:00:00', 2, 1, '', '2026-05-25 09:20:28', '2026-05-25 09:30:21'),
+(30, 9, NULL, 2, '112233', '445566', '2026-06-01', '2026-05-25 00:00:00', 2, 1, '', '2026-05-25 09:20:29', '2026-05-25 09:30:19'),
+(31, 9, NULL, 2, '112233', '445566', '2026-06-01', '2026-05-25 00:00:00', 2, 1, '', '2026-05-25 09:20:29', '2026-05-25 09:30:15'),
+(32, 9, NULL, 2, 'Akhil', 'inventory_id', '2026-05-25', '2026-07-31 00:00:00', 3, 1, '', '2026-05-25 09:29:07', '2026-05-25 09:31:16'),
+(33, 14, 32, 2, 'Akhil', 'inventory_id', '2026-05-25', '2026-07-31 00:00:00', 3, 1, '', '2026-05-25 09:29:08', '2026-05-25 09:29:08'),
+(34, 15, 32, 2, 'Akhil', 'inventory_id', '2026-05-25', '2026-07-31 00:00:00', 3, 1, '', '2026-05-25 09:29:08', '2026-05-25 09:29:08'),
+(35, 16, 32, 2, 'Akhil', 'inventory_id', '2026-05-25', '2026-07-31 00:00:00', 3, 1, '', '2026-05-25 09:29:08', '2026-05-25 09:29:08'),
+(36, 17, 32, 2, 'Akhil', 'inventory_id', '2026-05-25', '2026-07-31 00:00:00', 3, 1, '', '2026-05-25 09:29:09', '2026-05-25 09:29:09'),
+(37, 10, NULL, 2, '113366', '778899', '2026-05-25', '2026-08-20 00:00:00', 2, 1, '', '2026-05-25 09:37:42', '2026-05-25 10:00:10'),
+(38, 12, 37, 2, '113366', '778899', '2026-05-25', '2026-08-20 00:00:00', 2, 1, '', '2026-05-25 09:37:42', '2026-05-25 10:00:06'),
+(39, 13, 37, 2, '113366', '778899', '2026-05-25', '2026-08-20 00:00:00', 2, 1, '', '2026-05-25 09:37:42', '2026-05-25 10:00:03'),
+(40, 34, NULL, 1, 'ABC123', 'XXCXER', '2026-05-01', '2027-03-01 00:00:00', 7, 1, '', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
+(41, 23, 40, 1, 'ABC123', 'XXCXER', '2026-05-01', '2027-03-01 00:00:00', 7, 1, '', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
+(42, 24, 40, 1, 'ABC123', 'XXCXER', '2026-05-01', '2027-03-01 00:00:00', 7, 1, '', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
+(43, 25, 40, 1, 'ABC123', 'XXCXER', '2026-05-01', '2027-03-01 00:00:00', 7, 1, '', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
+(44, 26, 40, 1, 'ABC123', 'XXCXER', '2026-05-01', '2027-03-01 00:00:00', 7, 1, '', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
+(45, 27, 40, 1, 'ABC123', 'XXCXER', '2026-05-01', '2027-03-01 00:00:00', 7, 1, '', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
+(46, 28, 40, 1, 'ABC123', 'XXCXER', '2026-05-01', '2027-03-01 00:00:00', 7, 1, '', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
+(47, 29, 40, 1, 'ABC123', 'XXCXER', '2026-05-01', '2027-03-01 00:00:00', 7, 1, '', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
+(48, 9, NULL, 2, 'S11111S', 'M11111M', '2026-05-27', '2026-06-26 00:00:00', NULL, 1, '', '2026-05-27 07:26:32', '2026-05-27 07:26:32'),
+(49, 14, 48, 2, 'S11111S', 'M11111M', '2026-05-27', '2026-06-26 00:00:00', NULL, 1, '', '2026-05-27 07:26:32', '2026-05-27 07:26:32'),
+(50, 15, 48, 2, 'S11111S', 'M11111M', '2026-05-27', '2026-06-26 00:00:00', NULL, 1, '', '2026-05-27 07:26:32', '2026-05-27 07:26:32'),
+(51, 16, 48, 2, 'S11111S', 'M11111M', '2026-05-27', '2026-06-26 00:00:00', NULL, 1, '', '2026-05-27 07:26:32', '2026-05-27 07:26:32'),
+(52, 17, 48, 2, 'S11111S', 'M11111M', '2026-05-27', '2026-06-26 00:00:00', NULL, 1, '', '2026-05-27 07:26:32', '2026-05-27 07:26:32');
 
 -- --------------------------------------------------------
 
@@ -111,6 +148,7 @@ CREATE TABLE `fdss_coach_inventory` (
   `inventory_unit_id` int(11) NOT NULL,
   `user_id` int(11) NOT NULL,
   `status` enum('Active','Expired') DEFAULT 'Active',
+  `warranty_replace_status` enum('warranty','replace','normal') NOT NULL DEFAULT 'normal',
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
@@ -119,9 +157,43 @@ CREATE TABLE `fdss_coach_inventory` (
 -- Dumping data for table `fdss_coach_inventory`
 --
 
-INSERT INTO `fdss_coach_inventory` (`id`, `coach_id`, `inventory_unit_id`, `user_id`, `status`, `created_at`, `updated_at`) VALUES
-(11, 5, 6, 2, 'Active', '2026-05-18 12:03:41', '2026-05-18 12:03:41'),
-(12, 5, 4, 2, 'Active', '2026-05-18 12:04:23', '2026-05-18 12:04:23');
+INSERT INTO `fdss_coach_inventory` (`id`, `coach_id`, `inventory_unit_id`, `user_id`, `status`, `warranty_replace_status`, `created_at`, `updated_at`) VALUES
+(11, 5, 6, 2, 'Active', 'warranty', '2026-05-18 12:03:41', '2026-05-18 12:03:41'),
+(12, 5, 4, 2, 'Active', 'warranty', '2026-05-18 12:04:23', '2026-05-18 12:04:23'),
+(13, 3, 16, 2, 'Active', 'warranty', '2026-05-19 12:33:04', '2026-05-19 12:33:04'),
+(14, 77, 18, 2, 'Active', 'warranty', '2026-05-22 17:40:51', '2026-05-22 17:40:51'),
+(15, 76, 19, 2, 'Active', 'warranty', '2026-05-23 06:14:21', '2026-05-23 06:14:21'),
+(16, 44, 20, 2, 'Active', 'warranty', '2026-05-23 07:32:42', '2026-05-23 07:32:42'),
+(17, 69, 21, 2, 'Active', 'warranty', '2026-05-23 07:32:43', '2026-05-23 07:32:43'),
+(18, 75, 22, 2, 'Active', 'warranty', '2026-05-23 07:44:01', '2026-05-23 07:44:01'),
+(19, 77, 5, 2, 'Active', 'warranty', '2026-05-25 06:33:04', '2026-05-25 06:33:04'),
+(20, 77, 23, 2, 'Active', 'warranty', '2026-05-25 06:35:00', '2026-05-25 06:35:00'),
+(21, 74, 27, 2, 'Active', 'warranty', '2026-05-25 09:20:28', '2026-05-25 09:20:28'),
+(22, 74, 28, 2, 'Active', 'warranty', '2026-05-25 09:20:28', '2026-05-25 09:20:28'),
+(23, 74, 29, 2, 'Active', 'warranty', '2026-05-25 09:20:28', '2026-05-25 09:20:28'),
+(24, 74, 30, 2, 'Active', 'warranty', '2026-05-25 09:20:29', '2026-05-25 09:20:29'),
+(25, 74, 31, 2, 'Active', 'warranty', '2026-05-25 09:20:29', '2026-05-25 09:20:29'),
+(26, 69, 32, 2, 'Active', 'warranty', '2026-05-25 09:29:07', '2026-05-25 09:29:07'),
+(27, 69, 33, 2, 'Active', 'warranty', '2026-05-25 09:29:08', '2026-05-25 09:29:08'),
+(28, 69, 34, 2, 'Active', 'warranty', '2026-05-25 09:29:08', '2026-05-25 09:29:08'),
+(29, 69, 35, 2, 'Active', 'warranty', '2026-05-25 09:29:08', '2026-05-25 09:29:08'),
+(30, 69, 36, 2, 'Active', 'warranty', '2026-05-25 09:29:09', '2026-05-25 09:29:09'),
+(32, 73, 37, 2, 'Active', 'warranty', '2026-05-25 09:57:58', '2026-05-25 09:57:58'),
+(33, 73, 38, 2, 'Active', 'warranty', '2026-05-25 09:57:59', '2026-05-25 09:57:59'),
+(34, 73, 39, 2, 'Active', 'warranty', '2026-05-25 09:57:59', '2026-05-25 09:57:59'),
+(35, 78, 40, 1, 'Active', 'warranty', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
+(36, 78, 41, 1, 'Active', 'warranty', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
+(37, 78, 42, 1, 'Active', 'warranty', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
+(38, 78, 43, 1, 'Active', 'warranty', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
+(39, 78, 44, 1, 'Active', 'warranty', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
+(40, 78, 45, 1, 'Active', 'warranty', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
+(41, 78, 46, 1, 'Active', 'warranty', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
+(42, 78, 47, 1, 'Active', 'warranty', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
+(43, 79, 48, 2, 'Active', 'warranty', '2026-05-27 07:26:32', '2026-05-27 07:26:32'),
+(44, 79, 49, 2, 'Active', 'warranty', '2026-05-27 07:26:32', '2026-05-27 07:26:32'),
+(45, 79, 50, 2, 'Active', 'warranty', '2026-05-27 07:26:32', '2026-05-27 07:26:32'),
+(46, 79, 51, 2, 'Active', 'warranty', '2026-05-27 07:26:32', '2026-05-27 07:26:32'),
+(47, 79, 52, 2, 'Active', 'warranty', '2026-05-27 07:26:32', '2026-05-27 07:26:32');
 
 -- --------------------------------------------------------
 
@@ -138,6 +210,7 @@ CREATE TABLE `fdss_coach_schedule` (
   `status` enum('Pending','Assigned','Completed') DEFAULT 'Pending',
   `auditor_id` int(11) DEFAULT NULL,
   `assignment_date_time` datetime DEFAULT NULL,
+  `Inspection_Type` varchar(255) DEFAULT NULL,
   `priority` enum('Normal','High') DEFAULT 'Normal',
   `special_remarks` text DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT current_timestamp(),
@@ -150,9 +223,18 @@ CREATE TABLE `fdss_coach_schedule` (
 -- Dumping data for table `fdss_coach_schedule`
 --
 
-INSERT INTO `fdss_coach_schedule` (`schedule_id`, `coach_id`, `train_info_id`, `last_inspection_date`, `next_due_date`, `status`, `auditor_id`, `assignment_date_time`, `priority`, `special_remarks`, `created_at`, `updated_at`, `user_id`, `schedule_status`) VALUES
-(6, 1, 6, NULL, '2026-06-25', 'Completed', 6, '2026-05-19 10:01:00', 'Normal', '', '2026-05-18 13:17:45', '2026-05-19 10:28:41', 2, 0),
-(7, 3, 2, NULL, '2026-06-21', 'Assigned', 6, '2026-05-20 10:00:00', 'High', '', '2026-05-19 10:59:17', '2026-05-19 10:59:17', 2, 0);
+INSERT INTO `fdss_coach_schedule` (`schedule_id`, `coach_id`, `train_info_id`, `last_inspection_date`, `next_due_date`, `status`, `auditor_id`, `assignment_date_time`, `Inspection_Type`, `priority`, `special_remarks`, `created_at`, `updated_at`, `user_id`, `schedule_status`) VALUES
+(6, 1, 6, NULL, '2026-06-25', 'Completed', 6, '2026-05-19 10:01:00', '3_month', 'Normal', '', '2026-05-18 13:17:45', '2026-05-23 11:18:39', 2, 0),
+(7, 3, 2, NULL, '2026-06-21', 'Assigned', 6, '2026-05-20 10:00:00', '1_month', 'High', '', '2026-05-19 10:59:17', '2026-05-23 11:18:22', 2, 0),
+(8, 53, NULL, NULL, '2026-05-29', 'Assigned', 6, '2026-05-20 10:00:00', '1_month', 'Normal', '', '2026-05-23 06:23:21', '2026-05-23 11:18:18', 2, 0),
+(9, 2, 6, NULL, '2026-08-16', 'Assigned', 6, '2026-05-16 10:00:00', '1_month', 'Normal', '', '2026-05-23 09:10:11', '2026-05-23 10:38:25', 2, 0),
+(10, 21, 6, NULL, '2026-06-15', 'Assigned', 6, '2026-05-16 10:00:00', '1_month', 'Normal', '', '2026-05-23 10:19:45', '2026-05-23 10:19:45', 2, 0),
+(11, 3, 2, NULL, '2026-05-23', 'Assigned', 6, '2026-05-23 16:23:00', 'Round Trip', 'Normal', '', '2026-05-23 10:53:57', '2026-05-23 10:53:57', 2, 0),
+(12, 78, 8, NULL, '2026-06-28', 'Assigned', 8, '2026-05-29 10:00:00', '1_month', 'Normal', '', '2026-05-26 12:40:53', '2026-05-26 12:40:53', 1, 0),
+(13, 23, 6, NULL, '2026-06-15', 'Assigned', 6, '2026-05-16 10:00:00', '2_month', 'Normal', '', '2026-05-26 20:37:23', '2026-05-26 20:37:23', 2, 0),
+(14, 20, 6, NULL, '2026-06-29', 'Assigned', 6, '2026-05-30 10:00:00', '6_month', 'Normal', '', '2026-05-26 20:39:26', '2026-05-26 20:39:26', 2, 0),
+(15, 74, 7, NULL, '2026-06-19', 'Assigned', 6, '2026-05-27 10:00:00', '1_month', 'Normal', '', '2026-05-27 07:11:33', '2026-05-27 07:11:51', 2, 0),
+(16, 79, NULL, NULL, '2026-06-28', 'Assigned', 6, '2026-05-29 10:00:00', '1_month', 'Normal', '', '2026-05-27 07:26:46', '2026-05-27 07:26:46', 2, 0);
 
 -- --------------------------------------------------------
 
@@ -257,7 +339,7 @@ CREATE TABLE `fdss_Inventory_Management` (
   `item_code` varchar(100) NOT NULL,
   `item_name` varchar(255) NOT NULL,
   `quantity` int(11) DEFAULT NULL,
-  `category` enum('Primary','Secondary') NOT NULL,
+  `category` enum('FDSS','FSDS','Primary','Secondary','FDSSPARA','FSDSPARA') NOT NULL,
   `status` enum('Working','Needs Check','Not Working') DEFAULT 'Working',
   `user_id` int(11) NOT NULL,
   `last_updated` timestamp NULL DEFAULT current_timestamp(),
@@ -271,13 +353,34 @@ CREATE TABLE `fdss_Inventory_Management` (
 --
 
 INSERT INTO `fdss_Inventory_Management` (`inventory_id`, `item_code`, `item_name`, `quantity`, `category`, `status`, `user_id`, `last_updated`, `remarks`, `created_at`, `updated_at`) VALUES
-(1, 'INV-WC-001', 'Hooter', 32, 'Primary', 'Working', 2, '2026-05-13 16:29:28', 'best produt', '2026-05-12 08:33:09', '2026-05-13 16:29:28'),
+(1, 'INV-WC-001', 'Hooter', 32, 'Secondary', 'Working', 2, '2026-05-25 06:38:01', 'best produt', '2026-05-12 08:33:09', '2026-05-25 06:38:01'),
 (2, 'INV-WC-002', 'Flasher light', 380, 'Primary', 'Working', 2, '2026-05-13 16:29:23', 'good', '2026-05-12 08:33:31', '2026-05-13 16:29:23'),
 (3, 'INV-WC-003', 'Smoke Sensor inside Genset area in case of LWLRRM / PP end side in LWCBAC', 45, 'Primary', 'Needs Check', 2, '2026-05-13 16:29:15', 'best', '2026-05-12 08:33:52', '2026-05-13 16:29:15'),
 (4, 'INV-WC-004', 'Smoke Sensor in Crew area incase of LWLRRM/one each at manager/c&w cabin', 22, 'Primary', 'Working', 2, '2026-05-13 16:29:07', 'good', '2026-05-12 08:34:12', '2026-05-13 16:29:07'),
 (5, 'INV-WC-005', 'Smoke Sensor in Guard area in LWLRRM/ store room in LWCBAC', 90, 'Primary', 'Working', 2, '2026-05-13 16:29:02', 'good', '2026-05-12 08:34:28', '2026-05-13 16:29:02'),
 (6, 'INV-WC-006', 'Heat Sensor in Genset area in case of LWLRRM/kitchen room incase of LWCBAC', 2, 'Primary', 'Working', 2, '2026-05-14 09:47:42', 'good', '2026-05-12 08:34:45', '2026-05-15 16:15:07'),
-(7, 'INV-WC-007', 'Heat detection test for LWLRRM (Engine shutdown when temp raise)', 13, 'Primary', 'Not Working', 2, '2026-05-13 16:31:00', 'good', '2026-05-12 08:35:06', '2026-05-18 11:05:19');
+(7, 'INV-WC-007', 'Heat detection test for LWLRRM (Engine shutdown when temp raise)', 13, 'Primary', 'Not Working', 2, '2026-05-13 16:31:00', 'good', '2026-05-12 08:35:06', '2026-05-18 11:05:19'),
+(9, 'INV-WC-008', 'FDSS', 11, 'FDSS', 'Working', 2, '2026-05-23 07:06:07', 'na', '2026-05-22 17:38:16', '2026-05-27 07:26:32'),
+(10, 'INV-WC-009', 'FSDS', 6, 'FSDS', 'Working', 2, '2026-05-23 07:06:12', 'NA', '2026-05-23 05:46:25', '2026-05-25 09:37:42'),
+(12, 'INV-WC-011', 'hooter', NULL, 'FSDSPARA', 'Working', 2, '2026-05-25 07:52:18', '', '2026-05-25 07:52:18', '2026-05-25 07:52:18'),
+(13, 'INV-WC-012', 'no hooter', NULL, 'FSDSPARA', 'Working', 2, '2026-05-25 07:52:18', '', '2026-05-25 07:52:18', '2026-05-25 07:52:18'),
+(14, 'INV-WC-013', 'Hooter', NULL, 'FDSSPARA', 'Working', 2, '2026-05-25 08:30:44', '', '2026-05-25 08:30:44', '2026-05-25 08:30:44'),
+(15, 'INV-WC-014', 'Smoke', NULL, 'FDSSPARA', 'Working', 2, '2026-05-25 08:30:44', '', '2026-05-25 08:30:44', '2026-05-25 08:30:44'),
+(16, 'INV-WC-015', 'Fire', NULL, 'FDSSPARA', 'Working', 2, '2026-05-25 08:30:44', '', '2026-05-25 08:30:44', '2026-05-25 08:30:44'),
+(17, 'INV-WC-016', 'alarm', NULL, 'FDSSPARA', 'Working', 2, '2026-05-25 08:30:45', '', '2026-05-25 08:30:45', '2026-05-25 08:30:45'),
+(23, 'INV-WC-017', 'Hooter', NULL, 'FDSSPARA', 'Working', 1, '2026-05-26 10:40:25', '', '2026-05-26 10:40:25', '2026-05-26 10:40:25'),
+(24, 'INV-WC-018', 'Flasher Light', NULL, 'FDSSPARA', 'Working', 1, '2026-05-26 10:40:25', '', '2026-05-26 10:40:25', '2026-05-26 10:40:25'),
+(25, 'INV-WC-019', 'Smoke Sensor inside Genset area in case of LWLRRM / PP end side in LWCBAC', NULL, 'FDSSPARA', 'Working', 1, '2026-05-26 10:40:25', '', '2026-05-26 10:40:25', '2026-05-26 10:40:25'),
+(26, 'INV-WC-020', 'Smoke Sensor inside Genset area in case of LWLRRM / PP end side in LWCBAC', NULL, 'FDSSPARA', 'Working', 1, '2026-05-26 10:40:25', '', '2026-05-26 10:40:25', '2026-05-26 10:40:25'),
+(27, 'INV-WC-021', 'Smoke Sensor in Guard area in LWLRRM/ store room in LWCBAC', NULL, 'FDSSPARA', 'Working', 1, '2026-05-26 10:40:25', '', '2026-05-26 10:40:25', '2026-05-26 10:40:25'),
+(28, 'INV-WC-022', 'Heat Sensor in Genset area in case of LWLRRM/kitchen room incase of LWCBAC', NULL, 'FDSSPARA', 'Working', 1, '2026-05-26 10:40:25', '', '2026-05-26 10:40:25', '2026-05-26 10:40:25'),
+(29, 'INV-WC-023', 'Heat detection test for LWLRRM( Engine shutdown when temp raise)', NULL, 'FDSSPARA', 'Working', 1, '2026-05-26 10:40:25', '', '2026-05-26 10:40:25', '2026-05-26 10:40:25'),
+(30, 'INV-WC-024', 'Hooter', NULL, 'FSDSPARA', 'Working', 1, '2026-05-26 10:41:15', '', '2026-05-26 10:41:15', '2026-05-26 10:41:15'),
+(31, 'INV-WC-025', 'Flasher light', NULL, 'FSDSPARA', 'Working', 1, '2026-05-26 10:41:15', '', '2026-05-26 10:41:15', '2026-05-26 10:41:15'),
+(32, 'INV-WC-026', 'Smoke Sensor in Compartment', NULL, 'FSDSPARA', 'Working', 1, '2026-05-26 10:41:15', '', '2026-05-26 10:41:15', '2026-05-26 10:41:15'),
+(33, 'INV-WC-027', 'Smoke Sensor in Lavatory', NULL, 'FSDSPARA', 'Working', 1, '2026-05-26 10:41:15', '', '2026-05-26 10:41:15', '2026-05-26 10:41:15'),
+(34, '1A', 'FDSS', 1, 'FDSS', 'Working', 1, '2026-05-26 10:41:57', '', '2026-05-26 10:41:57', '2026-05-26 12:21:30'),
+(35, '1B', 'FSDS', NULL, 'FSDS', 'Working', 1, '2026-05-26 10:42:48', '', '2026-05-26 10:42:48', '2026-05-26 10:42:48');
 
 -- --------------------------------------------------------
 
@@ -307,7 +410,11 @@ INSERT INTO `fdss_manufacturers` (`manufacturer_id`, `company_name`, `name`, `mo
 (2, 'beatle team', '', NULL, NULL, NULL, 'Active', 2, '2026-05-14 10:45:22', '2026-05-14 10:48:31'),
 (3, 'king', '', NULL, NULL, NULL, 'Active', 2, '2026-05-14 10:45:22', '2026-05-14 10:48:32'),
 (4, 'Kings', '', NULL, NULL, NULL, 'Active', 2, '2026-05-14 10:45:22', '2026-05-14 10:48:34'),
-(5, 'beatle test', '', NULL, NULL, NULL, 'Active', 2, '2026-05-14 10:45:23', '2026-05-14 10:48:37');
+(5, 'beatle test', '', NULL, NULL, NULL, 'Active', 2, '2026-05-14 10:45:23', '2026-05-14 10:48:37'),
+(7, 'Sanork', 'Sidharth Jugran', '8000221818', 'sidharth.jugran2@gmail.com', '147, New KISHAN NAGAR EXTENSION\r\nSTREET - 2 LANE - 8, KISHAN NAGAR', 'Active', 1, '2026-05-26 09:55:17', '2026-05-26 09:55:17'),
+(8, 'JK Exim', 'Anuj Sharma', '7567706549', 'anuj@beatleanalytics.com', 'Adhoiwala, Dehradun', 'Active', 1, '2026-05-26 09:56:07', '2026-05-26 09:56:07'),
+(9, 'MS Advance', 'Akhil Gusain', '9854785489', 'akhil@beatleanlaytics.com', 'Dehradun', 'Active', 1, '2026-05-26 09:57:36', '2026-05-26 09:57:36'),
+(10, 'Tayal Co.', 'Sarthak Bhatt', '7854785489', 'sarthak@beatleanalytics.com', 'Dehradun', 'Active', 1, '2026-05-26 09:58:25', '2026-05-26 09:58:25');
 
 -- --------------------------------------------------------
 
@@ -342,27 +449,101 @@ CREATE TABLE `fdss_train_coach` (
   `coach_id` int(11) NOT NULL,
   `train_info_id` varchar(10) DEFAULT NULL,
   `coach_no` varchar(50) NOT NULL,
-  `coach_type` varchar(100) DEFAULT NULL,
   `Type` varchar(20) DEFAULT NULL,
+  `coach_type` varchar(100) DEFAULT NULL,
   `user_id` int(11) NOT NULL,
   `coach_status` enum('Detached','Intact') NOT NULL DEFAULT 'Intact',
   `status` enum('Active','Inactive') DEFAULT 'Active',
   `next_inspection_date` date DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `schedule_status` int(11) NOT NULL DEFAULT 0
+  `schedule_status` int(11) NOT NULL DEFAULT 0 COMMENT 'O means coach is free 1 means cach work is progress'
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 
 --
 -- Dumping data for table `fdss_train_coach`
 --
 
-INSERT INTO `fdss_train_coach` (`coach_id`, `train_info_id`, `coach_no`, `coach_type`, `Type`, `user_id`, `coach_status`, `status`, `next_inspection_date`, `created_at`, `updated_at`, `schedule_status`) VALUES
-(1, '6', '22334', 'FSDS', NULL, 2, 'Intact', 'Active', '2026-06-25', '2026-05-12 08:41:48', '2026-05-19 10:28:41', 0),
-(2, '6', '44556', 'FDSS', NULL, 2, 'Intact', 'Active', '2026-05-28', '2026-05-13 06:48:51', '2026-05-19 10:28:49', 0),
-(3, '2', '77889', 'FDSS', NULL, 2, 'Intact', 'Active', '2026-06-21', '2026-05-13 08:42:22', '2026-05-19 10:59:17', 1),
-(4, '6', 'SWLWACCN121655', 'FSDS', 'SWLWACCN1', 2, 'Intact', 'Active', '2026-05-20', '2026-05-14 07:52:02', '2026-05-18 13:00:52', 0),
-(5, NULL, 'SELC55443', 'FDSS', NULL, 2, 'Intact', 'Active', '2026-05-22', '2026-05-18 10:16:35', '2026-05-18 12:31:24', 0);
+INSERT INTO `fdss_train_coach` (`coach_id`, `train_info_id`, `coach_no`, `Type`, `coach_type`, `user_id`, `coach_status`, `status`, `next_inspection_date`, `created_at`, `updated_at`, `schedule_status`) VALUES
+(1, '6', '22334', '', 'FSDS', 2, 'Intact', 'Active', '2026-06-25', '2026-05-12 08:41:48', '2026-05-19 10:28:41', 0),
+(2, '6', '44556', '', 'FDSS', 2, 'Intact', 'Active', '2026-08-16', '2026-05-13 06:48:51', '2026-05-23 09:10:12', 1),
+(3, '2', '77889', '', 'FDSS', 2, 'Intact', 'Active', '2026-06-21', '2026-05-13 08:42:22', '2026-05-19 10:59:17', 1),
+(4, '6', 'SWLWACCN121655', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-14 07:52:02', '2026-05-18 13:00:52', 0),
+(5, NULL, 'SELC55443', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
+(6, NULL, 'SELC55448', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
+(7, NULL, 'SELC55449', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-23', '2026-05-19 10:16:35', '2026-05-22 06:22:01', 0),
+(8, NULL, 'SELC55450', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
+(9, NULL, 'SELC55451', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
+(10, NULL, 'SELC55452', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-23', '2026-05-19 10:16:35', '2026-05-22 06:22:01', 0),
+(11, NULL, 'SELC55453', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
+(12, NULL, 'SELC55454', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
+(13, NULL, 'SELC55455', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-23', '2026-05-19 10:16:35', '2026-05-22 06:22:01', 0),
+(14, NULL, 'SELC55456', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
+(15, NULL, 'SELC55457', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
+(16, NULL, 'SELC55458', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-23', '2026-05-19 10:16:35', '2026-05-22 06:22:01', 0),
+(17, NULL, 'SELC55459', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
+(18, NULL, 'SELC55460', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
+(19, NULL, 'SELC55461', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-23', '2026-05-19 10:16:35', '2026-05-22 06:22:01', 0),
+(20, '6', 'SELC55462', '', 'FDSS', 2, 'Intact', 'Active', '2026-06-29', '2026-05-18 10:16:35', '2026-05-26 20:39:26', 1),
+(21, '6', 'SELC55463', '', 'FSDS', 2, 'Intact', 'Active', '2026-06-15', '2026-05-18 10:16:35', '2026-05-23 10:19:45', 1),
+(22, '2', 'SELC55464', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-23', '2026-05-19 10:16:35', '2026-05-22 06:22:01', 0),
+(23, '6', 'SELC55465', '', 'FDSS', 2, 'Intact', 'Active', '2026-06-15', '2026-05-18 10:16:35', '2026-05-26 20:37:23', 1),
+(24, NULL, 'SELC55466', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
+(25, NULL, 'SELC55467', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-23', '2026-05-19 10:16:35', '2026-05-22 06:22:01', 0),
+(26, '6', 'SELC55468', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
+(27, '2', 'SELC55469', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
+(28, '6', 'SELC55470', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-23', '2026-05-19 10:16:35', '2026-05-22 06:22:01', 0),
+(29, NULL, 'SELC55471', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
+(30, NULL, 'LCWC55448', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(31, NULL, 'LCWC55449', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-18 18:30:00', 0),
+(32, NULL, 'LCWC55450', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(33, NULL, 'LCWC55451', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(34, NULL, 'LCWC55452', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-18 18:30:00', 0),
+(35, NULL, 'LCWC55453', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(36, NULL, 'LCWC55454', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(37, NULL, 'LCWC55455', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-18 18:30:00', 0),
+(38, NULL, 'LCWC55456', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(39, NULL, 'LCWC55457', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(40, NULL, 'LCWC55458', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-18 18:30:00', 0),
+(41, NULL, 'LCWC55459', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(42, NULL, 'LCWC55460', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(43, NULL, 'LCWC55461', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-18 18:30:00', 0),
+(44, '6', 'LCWC55462', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(45, '6', 'LCWC55463', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(46, '2', 'LCWC55464', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-18 18:30:00', 0),
+(47, '6', 'LCWC55465', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(48, NULL, 'LCWC55466', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(49, NULL, 'LCWC55467', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-18 18:30:00', 0),
+(50, '6', 'LCWC55468', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(51, '2', 'LCWC55469', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(52, '6', 'LCWC55470', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-18 18:30:00', 0),
+(53, NULL, 'LCWC55471', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(54, NULL, 'LCWC55472', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-29', '2026-05-17 18:30:00', '2026-05-23 06:23:21', 1),
+(55, NULL, 'LCWC55473', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-18 18:30:00', 0),
+(56, NULL, 'LCWC55474', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(57, NULL, 'LCWC55475', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(58, NULL, 'LCWC55476', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-18 18:30:00', 0),
+(59, NULL, 'LCWC55477', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(60, NULL, 'LCWC55478', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(61, NULL, 'LCWC55479', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-18 18:30:00', 0),
+(62, NULL, 'LCWC55480', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(63, NULL, 'LCWC55481', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(64, NULL, 'LCWC55482', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-18 18:30:00', 0),
+(65, NULL, 'LCWC55483', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(66, NULL, 'LCWC55484', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(67, NULL, 'LCWC55485', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-18 18:30:00', 0),
+(68, '6', 'LCWC55486', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(69, '6', 'LCWC55487', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(70, '2', 'LCWC55488', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-18 18:30:00', 0),
+(71, '6', 'LCWC55489', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(72, NULL, 'LCWC55490', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(73, NULL, 'LCWC55491', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-18 18:30:00', 0),
+(74, '7', 'LCWC55492', '', 'FSDS', 2, 'Intact', 'Active', '2026-06-19', '2026-05-17 18:30:00', '2026-05-27 07:11:33', 1),
+(75, '2', 'LCWC55493', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
+(76, NULL, 'LCWC55494', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-23 07:41:36', 0),
+(77, NULL, 'LCWC55495', 'SLERTY', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-26 11:13:17', 0),
+(78, '8', '242053', 'SW LWLRRM', 'FDSS', 1, 'Intact', 'Active', '2026-06-28', '2026-05-26 12:12:19', '2026-05-26 12:40:53', 1),
+(79, NULL, '111111', 'AAAAAA', 'FDSS', 2, 'Intact', 'Active', '2026-06-28', '2026-05-27 07:25:50', '2026-05-27 07:26:46', 1);
 
 -- --------------------------------------------------------
 
@@ -388,7 +569,12 @@ CREATE TABLE `fdss_train_information` (
 INSERT INTO `fdss_train_information` (`train_info_id`, `user_id`, `train_no`, `train_name`, `No_of_Coach`, `status`, `created_at`, `updated_at`) VALUES
 (2, 2, '22895', 'rajdhani expree', 22, 'Active', '2026-05-12 08:23:28', '2026-05-12 08:25:27'),
 (6, 2, '12345', 'express', 3, 'Active', '2026-05-12 08:28:53', '2026-05-12 08:28:53'),
-(7, 2, '11223', 'DDN express', 0, 'Active', '2026-05-18 12:13:05', '2026-05-19 10:54:31');
+(7, 2, '11223', 'DDN express', 0, 'Active', '2026-05-18 12:13:05', '2026-05-19 10:54:31'),
+(8, 1, '12275', 'Demo Train 1', 0, 'Active', '2026-05-26 09:58:54', '2026-05-26 09:58:54'),
+(9, 1, '12587', 'Demo Train 2', 0, 'Active', '2026-05-26 09:59:11', '2026-05-26 09:59:11'),
+(10, 1, '22584', 'Demo Train 3', 0, 'Active', '2026-05-26 09:59:22', '2026-05-26 09:59:22'),
+(11, 1, '96589', 'Demo Train 4', 0, 'Active', '2026-05-26 09:59:36', '2026-05-26 09:59:36'),
+(12, 1, '88754', 'Demo Train 5', 0, 'Active', '2026-05-26 09:59:46', '2026-05-26 09:59:46');
 
 -- --------------------------------------------------------
 
@@ -426,7 +612,8 @@ INSERT INTO `fdss_users` (`user_id`, `user_name`, `user_code`, `username`, `emai
 (2, 'kings', NULL, 'kings', 'kings@gmail.com', '$2y$10$1ayjmt0x/GsO9P9roIU0Fuci5hWqMywFZr6FYSxSKMAA1BCvwJs1y', NULL, '', 'NA', 'dehradun', 'ORG_ADMIN', 1, '2026-04-10', '2026-08-12', 'Active', NULL, '2026-04-10 08:45:10', '2026-05-19 10:18:05'),
 (4, 'admin', NULL, 'admin', 're@gmail.com', '$2y$10$1ayjmt0x/GsO9P9roIU0Fuci5hWqMywFZr6FYSxSKMAA1BCvwJs1y', NULL, NULL, NULL, NULL, 'ADMIN', 1, '2026-04-06', '2026-07-30', 'Active', NULL, '2026-04-06 08:32:59', '2026-05-06 11:42:08'),
 (5, 'Golu', NULL, 'aaa', 'aakh@gmail.com', '$2y$10$7on.bGREoRIspZUXEmKDIuLimMMn9caghLWlzhC5e.LXEAh04iL5q', NULL, 'N/A', 'N/A', NULL, 'AUDITOR', 1, '2026-05-30', '2026-05-30', 'Inactive', 2, '2026-05-06 08:08:19', '2026-05-18 12:27:18'),
-(6, 'akhil gusain', NULL, 'akhil_gusian_12', 'akhilgusain2@mail.com', '$2y$10$wZNR/Ffnno54swOy.G6NC.rbUgxdLf264IFsrk5MPqdSBTR6nT1ZG', NULL, '7830773698', 'Hr', NULL, 'AUDITOR', NULL, NULL, NULL, 'Active', 2, '2026-05-12 08:17:58', '2026-05-12 08:20:25');
+(6, 'akhil gusain', NULL, 'akhil_gusian_12', 'akhilgusain2@mail.com', '$2y$10$wZNR/Ffnno54swOy.G6NC.rbUgxdLf264IFsrk5MPqdSBTR6nT1ZG', NULL, '7830773698', 'Hr', NULL, 'AUDITOR', NULL, NULL, NULL, 'Active', 2, '2026-05-12 08:17:58', '2026-05-12 08:20:25'),
+(8, 'AG', NULL, 'ag__80', 'ag@gmail.com', '$2y$10$r.1vL/kbHXPHPVEzddXAsefU599ubpBFp2ynWyeqLGC19g4xrr2EW', NULL, '9854587456', 'SE', NULL, 'AUDITOR', NULL, NULL, NULL, 'Active', 1, '2026-05-26 12:38:39', '2026-05-26 12:38:39');
 
 -- --------------------------------------------------------
 
@@ -601,19 +788,19 @@ ALTER TABLE `fdds_coach_inspection`
 -- AUTO_INCREMENT for table `fdds_inventory_unit`
 --
 ALTER TABLE `fdds_inventory_unit`
-  MODIFY `unit_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
+  MODIFY `unit_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=53;
 
 --
 -- AUTO_INCREMENT for table `fdss_coach_inventory`
 --
 ALTER TABLE `fdss_coach_inventory`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=48;
 
 --
 -- AUTO_INCREMENT for table `fdss_coach_schedule`
 --
 ALTER TABLE `fdss_coach_schedule`
-  MODIFY `schedule_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `schedule_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=17;
 
 --
 -- AUTO_INCREMENT for table `fdss_divisions`
@@ -625,13 +812,13 @@ ALTER TABLE `fdss_divisions`
 -- AUTO_INCREMENT for table `fdss_Inventory_Management`
 --
 ALTER TABLE `fdss_Inventory_Management`
-  MODIFY `inventory_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+  MODIFY `inventory_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
 
 --
 -- AUTO_INCREMENT for table `fdss_manufacturers`
 --
 ALTER TABLE `fdss_manufacturers`
-  MODIFY `manufacturer_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `manufacturer_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
 -- AUTO_INCREMENT for table `fdss_stations`
@@ -643,19 +830,19 @@ ALTER TABLE `fdss_stations`
 -- AUTO_INCREMENT for table `fdss_train_coach`
 --
 ALTER TABLE `fdss_train_coach`
-  MODIFY `coach_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `coach_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=80;
 
 --
 -- AUTO_INCREMENT for table `fdss_train_information`
 --
 ALTER TABLE `fdss_train_information`
-  MODIFY `train_info_id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `train_info_id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- AUTO_INCREMENT for table `fdss_users`
 --
 ALTER TABLE `fdss_users`
-  MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `fdss_zones`
