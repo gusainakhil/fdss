@@ -321,42 +321,46 @@ try {
     $inspection_id = $conn->insert_id;
     $insert_stmt->close();
 
-    if (!$warranty_claim_table) {
+    $warranty_claim_id = null;
+
+    if ($in_warranty === 'yes' && !$warranty_claim_table) {
         throw new Exception('Warranty claim table not found.');
     }
 
-    $claim_columns = [];
-    $claim_placeholders = [];
-    $claim_types = '';
-    $claim_values = [];
+    if ($in_warranty === 'yes') {
+        $claim_columns = [];
+        $claim_placeholders = [];
+        $claim_types = '';
+        $claim_values = [];
 
-    add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'schedule_id', 'i', $schedule_id);
-    add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'unit_id', 'i', $unit_id);
-    add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'defectiveCause', 's', $defective_cause);
-    add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'otherObservation', 's', $other_observation);
-    add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'referenceNo', 's', $reference_no);
-    add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'suggestion', 's', $suggestion);
-    add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'status', 's', 'claim process');
+        add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'schedule_id', 'i', $schedule_id);
+        add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'unit_id', 'i', $unit_id);
+        add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'defectiveCause', 's', $defective_cause);
+        add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'otherObservation', 's', $other_observation);
+        add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'referenceNo', 's', $reference_no);
+        add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'suggestion', 's', $suggestion);
+        add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'status', 's', 'claim process');
 
-    if (isset($warranty_claim_columns_available['created_at'])) {
-        $claim_columns[] = '`created_at`';
-        $claim_placeholders[] = 'NOW()';
+        if (isset($warranty_claim_columns_available['created_at'])) {
+            $claim_columns[] = '`created_at`';
+            $claim_placeholders[] = 'NOW()';
+        }
+
+        if (empty($claim_columns)) {
+            throw new Exception('Warranty claim columns not found.');
+        }
+
+        $claim_query = 'INSERT INTO `' . $warranty_claim_table . '` (' . implode(', ', $claim_columns) . ')
+                        VALUES (' . implode(', ', $claim_placeholders) . ')';
+        $claim_stmt = $conn->prepare($claim_query);
+
+        if (!$claim_stmt || !bind_and_execute($claim_stmt, $claim_types, $claim_values)) {
+            throw new Exception('Warranty claim insert failed: ' . ($claim_stmt ? $claim_stmt->error : $conn->error));
+        }
+
+        $warranty_claim_id = $conn->insert_id;
+        $claim_stmt->close();
     }
-
-    if (empty($claim_columns)) {
-        throw new Exception('Warranty claim columns not found.');
-    }
-
-    $claim_query = 'INSERT INTO `' . $warranty_claim_table . '` (' . implode(', ', $claim_columns) . ')
-                    VALUES (' . implode(', ', $claim_placeholders) . ')';
-    $claim_stmt = $conn->prepare($claim_query);
-
-    if (!$claim_stmt || !bind_and_execute($claim_stmt, $claim_types, $claim_values)) {
-        throw new Exception('Warranty claim insert failed: ' . ($claim_stmt ? $claim_stmt->error : $conn->error));
-    }
-
-    $warranty_claim_id = $conn->insert_id;
-    $claim_stmt->close();
 
     $inventory_updates = [];
     $inventory_types = '';
@@ -389,24 +393,6 @@ try {
         $inventory_update_stmt->close();
     }
 
-    $schedule_stmt = $conn->prepare("UPDATE fdss_coach_schedule
-                                     SET status = 'Completed',
-                                         last_inspection_date = CURDATE()
-                                     WHERE schedule_id = ?
-                                     AND auditor_id = ?");
-
-    if (!$schedule_stmt) {
-        throw new Exception('Schedule update SQL error: ' . $conn->error);
-    }
-
-    $schedule_stmt->bind_param('ii', $schedule_id, $auditor_id);
-
-    if (!$schedule_stmt->execute()) {
-        throw new Exception('Schedule update failed: ' . $schedule_stmt->error);
-    }
-
-    $schedule_stmt->close();
-
     if ($detach_coach === 'yes') {
         $coach_stmt = $conn->prepare("UPDATE fdss_train_coach
                                       SET train_info_id = NULL
@@ -432,12 +418,12 @@ try {
         'success' => true,
         'message' => 'Inspection submitted successfully.',
         'inspection_id' => (int) $inspection_id,
-        'warranty_claim_id' => (int) $warranty_claim_id,
+        'warranty_claim_id' => $warranty_claim_id !== null ? (int) $warranty_claim_id : null,
         'updated' => [
             'inspection' => true,
-            'warranty_claim' => true,
+            'warranty_claim' => $in_warranty === 'yes',
             'coach_inventory' => !empty($inventory_updates),
-            'schedule' => true,
+            'schedule' => false,
             'coach_detached' => $detach_coach === 'yes'
         ]
     ]);
