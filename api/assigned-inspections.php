@@ -20,6 +20,17 @@ function send_json($status_code, $payload)
     exit;
 }
 
+function bind_statement($stmt, $bind_types, &$bind_values)
+{
+    $bind_references = [];
+
+    foreach ($bind_values as $key => $value) {
+        $bind_references[$key] = &$bind_values[$key];
+    }
+
+    return $stmt->bind_param($bind_types, ...$bind_references);
+}
+
 if (!in_array($_SERVER['REQUEST_METHOD'], ['GET', 'POST'], true)) {
     send_json(405, [
         'success' => false,
@@ -42,6 +53,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $auditor_id = (int) ($input['auditor_id'] ?? 0);
 $status = trim($input['status'] ?? '');
 $date = trim($input['date'] ?? '');
+$completed_count_only = in_array(
+    strtolower(trim((string) ($input['completed_count_only'] ?? $input['count_only'] ?? ''))),
+    ['1', 'true', 'yes'],
+    true
+);
 
 if ($auditor_id <= 0) {
     send_json(422, [
@@ -57,7 +73,7 @@ if ($date !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
     ]);
 }
 
-$auditor_query = "SELECT user_id, user_name, full_name, email, phone, status
+$auditor_query = "SELECT user_id, created_by_user_id, user_name, full_name, email, phone, status
                   FROM fdss_users
                   WHERE user_id = ?
                   AND role = 'AUDITOR'
@@ -83,6 +99,45 @@ if (!$auditor) {
     send_json(403, [
         'success' => false,
         'message' => 'Active auditor not found.'
+    ]);
+}
+
+$completed_count_where = "WHERE s.auditor_id = ? AND s.status = 'Completed'";
+$completed_count_types = "i";
+$completed_count_values = [$auditor_id];
+
+if ($date !== '') {
+    $completed_count_where .= " AND DATE(s.assignment_date_time) = ?";
+    $completed_count_types .= "s";
+    $completed_count_values[] = $date;
+}
+
+$completed_count_query = "SELECT COUNT(*) AS completed_count
+                          FROM fdss_coach_schedule s
+                          $completed_count_where";
+
+$completed_count_stmt = $conn->prepare($completed_count_query);
+
+if (!$completed_count_stmt) {
+    send_json(500, [
+        'success' => false,
+        'message' => 'Completed schedules count SQL error.'
+    ]);
+}
+
+bind_statement($completed_count_stmt, $completed_count_types, $completed_count_values);
+$completed_count_stmt->execute();
+$completed_count_result = $completed_count_stmt->get_result();
+$completed_count_row = $completed_count_result->fetch_assoc();
+$completed_count_stmt->close();
+
+$completed_count = (int) ($completed_count_row['completed_count'] ?? 0);
+
+if ($completed_count_only) {
+    send_json(200, [
+        'success' => true,
+        'message' => 'Completed schedules count fetched successfully.',
+        'completed_count' => $completed_count
     ]);
 }
 
@@ -125,8 +180,10 @@ $query = "SELECT
             s.status,
             c.coach_no,
             c.coach_type,
+            c.user_id,
             t.train_no,
             t.train_name,
+
             COUNT(i.inspection_id) AS submitted_items
           FROM fdss_coach_schedule s
           LEFT JOIN fdss_train_coach c
@@ -162,13 +219,7 @@ if (!$stmt) {
     ]);
 }
 
-$bind_references = [];
-
-foreach ($bind_values as $key => $value) {
-    $bind_references[$key] = &$bind_values[$key];
-}
-
-$stmt->bind_param($bind_types, ...$bind_references);
+bind_statement($stmt, $bind_types, $bind_values);
 $stmt->execute();
 $result = $stmt->get_result();
 $inspections = [];
@@ -198,12 +249,14 @@ send_json(200, [
     'success' => true,
     'message' => 'Assigned inspections fetched successfully.',
     'auditor' => [
-        'user_id' => (int) $auditor['user_id'],
-        'user_name' => $auditor['user_name'],
-        'full_name' => $auditor['full_name'],
-        'email' => $auditor['email'],
-        'phone' => $auditor['phone']
+        'AuditorID' => (int) $auditor['user_id'],
+        'CreatedByID' => (int) $auditor['created_by_user_id'],
+        'UserName' => $auditor['user_name'],
+        'FullName' => $auditor['full_name'],
+        'Email' => $auditor['email'],
+        'Phone' => $auditor['phone']
     ],
     'count' => count($inspections),
+    'completed_count' => $completed_count,
     'inspections' => $inspections
 ]);
