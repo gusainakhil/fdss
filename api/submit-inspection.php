@@ -127,6 +127,7 @@ $schedule_id = (int) ($input['schedule_id'] ?? 0);
 $coach_id = (int) ($input['coach_id'] ?? 0);
 $coach_inventory_id = (int) ($input['coach_inventory_id'] ?? 0);
 $unit_id = (int) ($input['unit_id'] ?? ($input['inventory_unit_id'] ?? 0));
+$input_inventory_parameter_id = (int) ($input['inventory_parameter_id'] ?? 0);
 
 $working_status = yes_no($input['workingStatus'] ?? '');
 $detach_coach = yes_no($input['detachCoach'] ?? '');
@@ -202,6 +203,7 @@ $inventory_query = "SELECT
                         ci.user_id AS owner_user_id,
                         iu.unit_id,
                         iu.inventory_id,
+                        iu.inventory_parameter_id,
                         iu.serial_number,
                         im.item_name
                     FROM fdss_coach_inventory ci
@@ -246,6 +248,9 @@ if (!$inventory) {
 
 $coach_inventory_id = (int) $inventory['coach_inventory_id'];
 $unit_id = (int) $inventory['unit_id'];
+$inventory_parameter_id = $inventory['inventory_parameter_id'] !== null
+    ? (int) $inventory['inventory_parameter_id']
+    : ($input_inventory_parameter_id > 0 ? $input_inventory_parameter_id : null);
 $coach_no = $coach_no ?: $schedule['db_coach_no'];
 $coach_type = $coach_type ?: $schedule['db_coach_type'];
 $condition = $working_status;
@@ -285,6 +290,7 @@ try {
     add_if_column($insert_columns, $insert_placeholders, $insert_types, $insert_values, $inspection_columns_available, 'auditor_id', 'i', $auditor_id);
     add_if_column($insert_columns, $insert_placeholders, $insert_types, $insert_values, $inspection_columns_available, 'user_id', 'i', $user_id);
     add_if_column($insert_columns, $insert_placeholders, $insert_types, $insert_values, $inspection_columns_available, 'inventory_id', 'i', (int) $inventory['inventory_id']);
+    add_if_column($insert_columns, $insert_placeholders, $insert_types, $insert_values, $inspection_columns_available, 'inventory_parameter_id', 'i', $inventory_parameter_id);
     add_if_column($insert_columns, $insert_placeholders, $insert_types, $insert_values, $inspection_columns_available, 'tool_name', 's', $param_title);
     add_if_column($insert_columns, $insert_placeholders, $insert_types, $insert_values, $inspection_columns_available, 'Serial_No', 's', (string) ($inventory['serial_number'] ?? '0'));
     add_if_column($insert_columns, $insert_placeholders, $insert_types, $insert_values, $inspection_columns_available, 'Conditions', 's', $condition);

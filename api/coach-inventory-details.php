@@ -136,6 +136,7 @@ $inventory_query = "SELECT
                         ci.warranty_replace_status,
                         ci.created_at AS assigned_at,
                         ci.updated_at AS assignment_updated_at,
+                        iu.inventory_parameter_id,
                         iu.unit_id,
                         iu.inventory_id,
                         iu.serial_number,
@@ -243,7 +244,8 @@ send_json(200, [
             'purchase_date' => $inventory['purchase_date'],
             'warranty_expire' => $inventory['warranty_expire'],
             'manufacturer_id' => $inventory['manufacturer_id'] !== null ? (int) $inventory['manufacturer_id'] : null,
-            'notes' => $inventory['notes']
+            'notes' => $inventory['notes'],
+            'inventory_parameter_id' => $inventory['inventory_parameter_id'] !== null ? (int) $inventory['inventory_parameter_id'] : null
         ],
         'component' => [
             'item_code' => $inventory['item_code'],
