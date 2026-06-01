@@ -39,6 +39,8 @@
                 <li><a href="reports.php"><i class="bi bi-graph-up"></i><span>System Reports</span></a></li>
             </ul>
         </li> -->
+        <li><a href="<?php echo $base_path; ?>Warranty-claim-process.php"><i class="bi bi-sliders"></i><span>Warranty Claims</span></a></li>
+
         <li><a href="<?php echo $base_path; ?>settings.php"><i class="bi bi-sliders"></i><span>Settings</span></a></li>
     </ul>
 </aside>
