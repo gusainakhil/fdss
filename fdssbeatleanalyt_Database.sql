@@ -3,8 +3,8 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: May 29, 2026 at 05:43 PM
--- Server version: 10.11.17-MariaDB
+-- Generation Time: Jun 02, 2026 at 02:01 PM
+-- Server version: 10.11.18-MariaDB
 -- PHP Version: 8.4.21
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
@@ -39,7 +39,8 @@ CREATE TABLE `fdds_coach_inspection` (
   `Serial_No` varchar(11) NOT NULL,
   `Conditions` varchar(255) NOT NULL,
   `unit_id` int(11) NOT NULL,
-  `status` enum('Pending','In Progress','Completed') DEFAULT 'Pending',
+  `inventory_parameter_id` int(11) DEFAULT NULL,
+  `status` enum('Pending','In_Progress','Completed') DEFAULT 'Pending',
   `remarks` text DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
@@ -49,14 +50,11 @@ CREATE TABLE `fdds_coach_inspection` (
 -- Dumping data for table `fdds_coach_inspection`
 --
 
-INSERT INTO `fdds_coach_inspection` (`inspection_id`, `schedule_id`, `train_info_id`, `coach_id`, `auditor_id`, `user_id`, `inventory_id`, `tool_name`, `Serial_No`, `Conditions`, `unit_id`, `status`, `remarks`, `created_at`, `updated_at`) VALUES
-(1, 6, 7, 3, 6, 2, 1, 'hooter', 'YHG562Y', 'ok', 8, 'Completed', 'good', '2026-05-19 10:34:50', '2026-05-19 10:44:55'),
-(2, 6, 7, 3, 6, 2, 1, 'hooter', 'YHG562YH', 'ok', 8, 'Pending', 'good', '2026-05-19 10:34:50', '2026-05-19 10:44:58'),
-(3, 6, 7, 3, 6, 2, 1, 'hooter', 'YHG562YH', 'ok', 8, 'Pending', 'good', '2026-05-19 10:34:50', '2026-05-19 10:45:01'),
-(4, 6, 7, 3, 6, 2, 1, 'hooter', 'YHG562YH', 'ok', 8, 'Pending', 'good', '2026-05-19 10:34:50', '2026-05-19 10:45:03'),
-(5, 6, 7, 3, 6, 2, 1, 'hooter', 'YHG562YH', 'ok', 8, 'Pending', 'good', '2026-05-19 10:34:50', '2026-05-19 10:45:05'),
-(6, 6, 7, 3, 6, 2, 1, 'hooter', '0', 'ok', 8, 'Pending', 'good', '2026-05-19 10:34:50', '2026-05-19 10:34:50'),
-(7, 6, 7, 3, 6, 2, 1, 'hooter', '0', 'ok', 8, 'Pending', 'good', '2026-05-19 10:34:50', '2026-05-19 10:34:50');
+INSERT INTO `fdds_coach_inspection` (`inspection_id`, `schedule_id`, `train_info_id`, `coach_id`, `auditor_id`, `user_id`, `inventory_id`, `tool_name`, `Serial_No`, `Conditions`, `unit_id`, `inventory_parameter_id`, `status`, `remarks`, `created_at`, `updated_at`) VALUES
+(27, 18, NULL, 79, 6, 2, 17, 'Working Condition of Flasher light', 'S11111S', 'yes', 52, 48, 'Completed', NULL, '2026-06-01 13:47:30', '2026-06-01 13:47:30'),
+(28, 18, NULL, 79, 6, 2, 14, 'Working Condition of Hooter', 'S11111S', 'no', 49, 48, 'Completed', NULL, '2026-06-01 13:47:42', '2026-06-01 13:47:42'),
+(29, 18, NULL, 79, 6, 2, 15, 'Working Condition of Smoke Sensor in Crew area incase of LWLRRM/one each at manager/c&w cabin', 'S11111S', 'no', 50, 48, 'Completed', NULL, '2026-06-01 13:47:53', '2026-06-01 13:47:53'),
+(30, 18, NULL, 79, 6, 2, 16, 'Working Condition of Smoke Sensor in Crew area incase of LWLRRM/one each at manager/c&w cabin', 'S11111S', 'yes', 51, 48, 'Completed', NULL, '2026-06-01 13:47:57', '2026-06-01 13:47:57');
 
 -- --------------------------------------------------------
 
@@ -106,9 +104,9 @@ INSERT INTO `fdds_inventory_unit` (`unit_id`, `inventory_id`, `inventory_paramet
 (21, 10, NULL, 2, 'ADBHTY', 'ADBHYT', '2026-06-06', '2026-08-28 00:00:00', 3, 1, '', '2026-05-23 07:32:43', '2026-05-25 08:21:36'),
 (22, 10, NULL, 2, 'KHJFT6435', 'VFD6578H', '2026-05-23', '2026-05-30 00:00:00', 1, 0, '', '2026-05-23 07:32:43', '2026-05-25 08:21:39'),
 (23, 10, NULL, 2, 'POHJFT6435', 'YUH5678', '2026-05-30', '2026-10-09 00:00:00', 3, 1, '', '2026-05-23 07:44:45', '2026-05-25 08:21:38'),
-(24, 9, NULL, 2, '12345', '223344', '2026-05-25', '2026-07-25 00:00:00', NULL, 0, '', '2026-05-25 08:41:53', '2026-05-25 08:41:53'),
+(24, 9, NULL, 2, '12345', '223344', '2026-05-25', '2026-07-25 00:00:00', 2, 0, '', '2026-05-25 08:41:53', '2026-06-01 14:37:36'),
 (25, 9, NULL, 2, 'kkkkkk', '11kkh', '2026-05-25', '2026-05-29 00:00:00', 2, 0, '', '2026-05-25 08:50:14', '2026-05-25 08:50:14'),
-(26, 9, NULL, 2, 'er', '23', '2026-05-25', '2026-05-30 00:00:00', NULL, 0, '', '2026-05-25 09:00:08', '2026-05-25 09:00:08'),
+(26, 9, NULL, 2, 'er', '23', '2026-05-25', '2026-05-30 00:00:00', 2, 0, '', '2026-05-25 09:00:08', '2026-06-01 14:37:34'),
 (27, 9, NULL, 2, '112233', '445566', '2026-06-01', '2026-05-25 00:00:00', 2, 1, '', '2026-05-25 09:20:28', '2026-05-25 09:20:28'),
 (28, 9, NULL, 2, '112233', '445566', '2026-06-01', '2026-05-25 00:00:00', 2, 1, '', '2026-05-25 09:20:28', '2026-05-25 09:30:23'),
 (29, 9, NULL, 2, '112233', '445566', '2026-06-01', '2026-05-25 00:00:00', 2, 1, '', '2026-05-25 09:20:28', '2026-05-25 09:30:21'),
@@ -130,11 +128,11 @@ INSERT INTO `fdds_inventory_unit` (`unit_id`, `inventory_id`, `inventory_paramet
 (45, 27, 40, 1, 'ABC123', 'XXCXER', '2026-05-01', '2027-03-01 00:00:00', 7, 1, '', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
 (46, 28, 40, 1, 'ABC123', 'XXCXER', '2026-05-01', '2027-03-01 00:00:00', 7, 1, '', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
 (47, 29, 40, 1, 'ABC123', 'XXCXER', '2026-05-01', '2027-03-01 00:00:00', 7, 1, '', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
-(48, 9, NULL, 2, 'S11111S', 'M11111M', '2026-05-27', '2026-06-26 00:00:00', NULL, 1, '', '2026-05-27 07:26:32', '2026-05-27 07:26:32'),
-(49, 14, 48, 2, 'S11111S', 'M11111M', '2026-05-27', '2026-06-26 00:00:00', NULL, 1, '', '2026-05-27 07:26:32', '2026-05-27 07:26:32'),
-(50, 15, 48, 2, 'S11111S', 'M11111M', '2026-05-27', '2026-06-26 00:00:00', NULL, 1, '', '2026-05-27 07:26:32', '2026-05-27 07:26:32'),
-(51, 16, 48, 2, 'S11111S', 'M11111M', '2026-05-27', '2026-06-26 00:00:00', NULL, 1, '', '2026-05-27 07:26:32', '2026-05-27 07:26:32'),
-(52, 17, 48, 2, 'S11111S', 'M11111M', '2026-05-27', '2026-06-26 00:00:00', NULL, 1, '', '2026-05-27 07:26:32', '2026-05-27 07:26:32');
+(48, 9, NULL, 2, 'S11111S', 'M11111M', '2026-05-27', '2026-06-26 00:00:00', 2, 1, '', '2026-05-27 07:26:32', '2026-06-01 14:38:01'),
+(49, 14, 48, 2, 'S11111S', 'M11111M', '2026-05-27', '2026-06-26 00:00:00', 2, 1, '', '2026-05-27 07:26:32', '2026-06-01 14:38:06'),
+(50, 15, 48, 2, 'S11111S', 'M11111M', '2026-05-27', '2026-06-26 00:00:00', 2, 1, '', '2026-05-27 07:26:32', '2026-06-01 14:38:10'),
+(51, 16, 48, 2, 'S11111S', 'M11111M', '2026-05-27', '2026-06-26 00:00:00', 2, 1, '', '2026-05-27 07:26:32', '2026-06-01 14:38:13'),
+(52, 17, 48, 2, 'S11111S', 'M11111M', '2026-05-27', '2026-06-26 00:00:00', 1, 1, '', '2026-05-27 07:26:32', '2026-06-01 14:37:09');
 
 -- --------------------------------------------------------
 
@@ -148,7 +146,7 @@ CREATE TABLE `fdss_coach_inventory` (
   `inventory_unit_id` int(11) NOT NULL,
   `user_id` int(11) NOT NULL,
   `status` enum('Active','Expired') DEFAULT 'Active',
-  `warranty_replace_status` enum('warranty','replace','normal') NOT NULL DEFAULT 'normal',
+  `warranty_replace_status` enum('warranty','replace','normal') DEFAULT 'normal',
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
@@ -189,11 +187,11 @@ INSERT INTO `fdss_coach_inventory` (`id`, `coach_id`, `inventory_unit_id`, `user
 (40, 78, 45, 1, 'Active', 'warranty', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
 (41, 78, 46, 1, 'Active', 'warranty', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
 (42, 78, 47, 1, 'Active', 'warranty', '2026-05-26 12:21:30', '2026-05-26 12:21:30'),
-(43, 79, 48, 2, 'Active', 'warranty', '2026-05-27 07:26:32', '2026-05-27 07:26:32'),
-(44, 79, 49, 2, 'Active', 'warranty', '2026-05-27 07:26:32', '2026-05-27 07:26:32'),
-(45, 79, 50, 2, 'Active', 'warranty', '2026-05-27 07:26:32', '2026-05-27 07:26:32'),
-(46, 79, 51, 2, 'Active', 'warranty', '2026-05-27 07:26:32', '2026-05-27 07:26:32'),
-(47, 79, 52, 2, 'Active', 'warranty', '2026-05-27 07:26:32', '2026-05-27 07:26:32');
+(43, 79, 48, 2, 'Active', 'normal', '2026-05-27 07:26:32', '2026-05-30 10:36:21'),
+(44, 79, 49, 2, 'Active', 'warranty', '2026-05-27 07:26:32', '2026-06-01 13:47:42'),
+(45, 79, 50, 2, 'Expired', 'replace', '2026-05-27 07:26:32', '2026-06-01 13:47:53'),
+(46, 79, 51, 2, 'Expired', 'normal', '2026-05-27 07:26:32', '2026-06-01 13:47:15'),
+(47, 79, 52, 2, 'Expired', 'normal', '2026-05-27 07:26:32', '2026-06-01 13:47:11');
 
 -- --------------------------------------------------------
 
@@ -207,7 +205,7 @@ CREATE TABLE `fdss_coach_schedule` (
   `train_info_id` bigint(20) DEFAULT NULL,
   `last_inspection_date` date DEFAULT NULL,
   `next_due_date` date DEFAULT NULL,
-  `status` enum('Pending','Assigned','Completed') DEFAULT 'Pending',
+  `status` enum('Pending','Assigned','Completed','Warranty-claim/replacement') DEFAULT 'Pending',
   `auditor_id` int(11) DEFAULT NULL,
   `assignment_date_time` datetime DEFAULT NULL,
   `Inspection_Type` varchar(255) DEFAULT NULL,
@@ -224,17 +222,8 @@ CREATE TABLE `fdss_coach_schedule` (
 --
 
 INSERT INTO `fdss_coach_schedule` (`schedule_id`, `coach_id`, `train_info_id`, `last_inspection_date`, `next_due_date`, `status`, `auditor_id`, `assignment_date_time`, `Inspection_Type`, `priority`, `special_remarks`, `created_at`, `updated_at`, `user_id`, `schedule_status`) VALUES
-(6, 1, 6, NULL, '2026-06-25', 'Completed', 6, '2026-05-19 10:01:00', '3_month', 'Normal', '', '2026-05-18 13:17:45', '2026-05-23 11:18:39', 2, 0),
-(7, 3, 2, NULL, '2026-06-21', 'Assigned', 6, '2026-05-20 10:00:00', '1_month', 'High', '', '2026-05-19 10:59:17', '2026-05-23 11:18:22', 2, 0),
-(8, 53, NULL, NULL, '2026-05-29', 'Assigned', 6, '2026-05-20 10:00:00', '1_month', 'Normal', '', '2026-05-23 06:23:21', '2026-05-23 11:18:18', 2, 0),
-(9, 2, 6, NULL, '2026-08-16', 'Assigned', 6, '2026-05-16 10:00:00', '1_month', 'Normal', '', '2026-05-23 09:10:11', '2026-05-23 10:38:25', 2, 0),
-(10, 21, 6, NULL, '2026-06-15', 'Assigned', 6, '2026-05-16 10:00:00', '1_month', 'Normal', '', '2026-05-23 10:19:45', '2026-05-23 10:19:45', 2, 0),
-(11, 3, 2, NULL, '2026-05-23', 'Assigned', 6, '2026-05-23 16:23:00', 'Round Trip', 'Normal', '', '2026-05-23 10:53:57', '2026-05-23 10:53:57', 2, 0),
-(12, 78, 8, NULL, '2026-06-28', 'Assigned', 8, '2026-05-29 10:00:00', '1_month', 'Normal', '', '2026-05-26 12:40:53', '2026-05-26 12:40:53', 1, 0),
-(13, 23, 6, NULL, '2026-06-15', 'Assigned', 6, '2026-05-16 10:00:00', '2_month', 'Normal', '', '2026-05-26 20:37:23', '2026-05-26 20:37:23', 2, 0),
-(14, 20, 6, NULL, '2026-06-29', 'Assigned', 6, '2026-05-30 10:00:00', '6_month', 'Normal', '', '2026-05-26 20:39:26', '2026-05-26 20:39:26', 2, 0),
-(15, 74, 7, NULL, '2026-06-19', 'Assigned', 6, '2026-05-27 10:00:00', '1_month', 'Normal', '', '2026-05-27 07:11:33', '2026-05-27 07:11:51', 2, 0),
-(16, 79, NULL, NULL, '2026-06-28', 'Assigned', 6, '2026-05-29 10:00:00', '1_month', 'Normal', '', '2026-05-27 07:26:46', '2026-05-27 07:26:46', 2, 0);
+(17, 12, NULL, NULL, '2026-07-01', 'Assigned', 6, '2026-06-01 10:00:00', '1_month', 'Normal', '', '2026-06-01 13:42:45', '2026-06-01 13:42:45', 2, 0),
+(18, 79, NULL, NULL, '2026-07-01', 'Warranty-claim/replacement', 6, '2026-06-01 10:00:00', '1_month', 'Normal', 'Done', '2026-06-01 13:45:43', '2026-06-01 13:51:29', 2, 0);
 
 -- --------------------------------------------------------
 
@@ -362,13 +351,13 @@ INSERT INTO `fdss_Inventory_Management` (`inventory_id`, `item_code`, `item_name
 (7, 'INV-WC-007', 'Heat detection test for LWLRRM (Engine shutdown when temp raise)', 13, 'Primary', 'Not Working', 2, '2026-05-13 16:31:00', 'good', '2026-05-12 08:35:06', '2026-05-18 11:05:19'),
 (9, 'INV-WC-008', 'FDSS', 11, 'FDSS', 'Working', 2, '2026-05-23 07:06:07', 'na', '2026-05-22 17:38:16', '2026-05-27 07:26:32'),
 (10, 'INV-WC-009', 'FSDS', 6, 'FSDS', 'Working', 2, '2026-05-23 07:06:12', 'NA', '2026-05-23 05:46:25', '2026-05-25 09:37:42'),
-(12, 'INV-WC-011', 'hooter', NULL, 'FSDSPARA', 'Working', 2, '2026-05-25 07:52:18', '', '2026-05-25 07:52:18', '2026-05-25 07:52:18'),
-(13, 'INV-WC-012', 'no hooter', NULL, 'FSDSPARA', 'Working', 2, '2026-05-25 07:52:18', '', '2026-05-25 07:52:18', '2026-05-25 07:52:18'),
-(14, 'INV-WC-013', 'Hooter', NULL, 'FDSSPARA', 'Working', 2, '2026-05-25 08:30:44', '', '2026-05-25 08:30:44', '2026-05-25 08:30:44'),
-(15, 'INV-WC-014', 'Smoke', NULL, 'FDSSPARA', 'Working', 2, '2026-05-25 08:30:44', '', '2026-05-25 08:30:44', '2026-05-25 08:30:44'),
-(16, 'INV-WC-015', 'Fire', NULL, 'FDSSPARA', 'Working', 2, '2026-05-25 08:30:44', '', '2026-05-25 08:30:44', '2026-05-25 08:30:44'),
-(17, 'INV-WC-016', 'alarm', NULL, 'FDSSPARA', 'Working', 2, '2026-05-25 08:30:45', '', '2026-05-25 08:30:45', '2026-05-25 08:30:45'),
-(23, 'INV-WC-017', 'Hooter', NULL, 'FDSSPARA', 'Working', 1, '2026-05-26 10:40:25', '', '2026-05-26 10:40:25', '2026-05-26 10:40:25'),
+(12, 'INV-WC-011', 'Working Condition of Hooter', NULL, 'FSDSPARA', 'Working', 2, '2026-05-25 07:52:18', '', '2026-05-25 07:52:18', '2026-06-01 10:34:38'),
+(13, 'INV-WC-012', 'Working Condition of Smoke Sensor in Guard area in LWLRRM/ store room in LWCBAC', NULL, 'FSDSPARA', 'Working', 2, '2026-05-25 07:52:18', '', '2026-05-25 07:52:18', '2026-06-01 10:39:28'),
+(14, 'INV-WC-013', 'Working Condition of Hooter', NULL, 'FDSSPARA', 'Working', 2, '2026-05-25 08:30:44', '', '2026-05-25 08:30:44', '2026-06-01 10:34:43'),
+(15, 'INV-WC-014', 'Working Condition of Smoke Sensor in Crew area incase of LWLRRM/one each at manager/c&w cabin', NULL, 'FDSSPARA', 'Working', 2, '2026-05-25 08:30:44', '', '2026-05-25 08:30:44', '2026-06-01 10:38:12'),
+(16, 'INV-WC-015', 'Working Condition of Smoke Sensor in Crew area incase of LWLRRM/one each at manager/c&w cabin', NULL, 'FDSSPARA', 'Working', 2, '2026-05-25 08:30:44', '', '2026-05-25 08:30:44', '2026-06-01 10:38:54'),
+(17, 'INV-WC-016', 'Working Condition of Flasher light', NULL, 'FDSSPARA', 'Working', 2, '2026-05-25 08:30:45', '', '2026-05-25 08:30:45', '2026-06-01 10:38:06'),
+(23, 'INV-WC-017', 'Working Condition of Smoke Sensor inside Genset area in case of LWLRRM / PP end side in LWCBAC', NULL, 'FDSSPARA', 'Working', 1, '2026-05-26 10:40:25', '', '2026-05-26 10:40:25', '2026-06-01 10:38:31'),
 (24, 'INV-WC-018', 'Flasher Light', NULL, 'FDSSPARA', 'Working', 1, '2026-05-26 10:40:25', '', '2026-05-26 10:40:25', '2026-05-26 10:40:25'),
 (25, 'INV-WC-019', 'Smoke Sensor inside Genset area in case of LWLRRM / PP end side in LWCBAC', NULL, 'FDSSPARA', 'Working', 1, '2026-05-26 10:40:25', '', '2026-05-26 10:40:25', '2026-05-26 10:40:25'),
 (26, 'INV-WC-020', 'Smoke Sensor inside Genset area in case of LWLRRM / PP end side in LWCBAC', NULL, 'FDSSPARA', 'Working', 1, '2026-05-26 10:40:25', '', '2026-05-26 10:40:25', '2026-05-26 10:40:25'),
@@ -379,8 +368,9 @@ INSERT INTO `fdss_Inventory_Management` (`inventory_id`, `item_code`, `item_name
 (31, 'INV-WC-025', 'Flasher light', NULL, 'FSDSPARA', 'Working', 1, '2026-05-26 10:41:15', '', '2026-05-26 10:41:15', '2026-05-26 10:41:15'),
 (32, 'INV-WC-026', 'Smoke Sensor in Compartment', NULL, 'FSDSPARA', 'Working', 1, '2026-05-26 10:41:15', '', '2026-05-26 10:41:15', '2026-05-26 10:41:15'),
 (33, 'INV-WC-027', 'Smoke Sensor in Lavatory', NULL, 'FSDSPARA', 'Working', 1, '2026-05-26 10:41:15', '', '2026-05-26 10:41:15', '2026-05-26 10:41:15'),
-(34, '1A', 'FDSS', 1, 'FDSS', 'Working', 1, '2026-05-26 10:41:57', '', '2026-05-26 10:41:57', '2026-05-26 12:21:30'),
-(35, '1B', 'FSDS', NULL, 'FSDS', 'Working', 1, '2026-05-26 10:42:48', '', '2026-05-26 10:42:48', '2026-05-26 10:42:48');
+(34, '1A', 'FDSS', 1, 'FSDSPARA', 'Working', 1, '2026-05-26 10:41:57', '', '2026-05-26 10:41:57', '2026-06-01 09:51:18'),
+(35, '1B', 'FSDS', NULL, 'FSDSPARA', 'Working', 1, '2026-05-26 10:42:48', '', '2026-05-26 10:42:48', '2026-06-01 09:51:25'),
+(36, 'INV-WC-028', 'Working Condition of Flasher light', NULL, 'FSDSPARA', 'Working', 2, '2026-06-01 14:34:29', '', '2026-06-01 14:34:29', '2026-06-01 14:34:29');
 
 -- --------------------------------------------------------
 
@@ -476,7 +466,7 @@ INSERT INTO `fdss_train_coach` (`coach_id`, `train_info_id`, `coach_no`, `Type`,
 (9, NULL, 'SELC55451', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
 (10, NULL, 'SELC55452', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-23', '2026-05-19 10:16:35', '2026-05-22 06:22:01', 0),
 (11, NULL, 'SELC55453', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
-(12, NULL, 'SELC55454', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
+(12, NULL, 'SELC55454', '', 'FDSS', 2, 'Intact', 'Active', '2026-07-01', '2026-05-18 10:16:35', '2026-06-01 13:42:45', 1),
 (13, NULL, 'SELC55455', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-23', '2026-05-19 10:16:35', '2026-05-22 06:22:01', 0),
 (14, NULL, 'SELC55456', '', 'FSDS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
 (15, NULL, 'SELC55457', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-16', '2026-05-18 10:16:35', '2026-05-21 07:40:18', 0),
@@ -542,8 +532,8 @@ INSERT INTO `fdss_train_coach` (`coach_id`, `train_info_id`, `coach_no`, `Type`,
 (75, '2', 'LCWC55493', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-17 18:30:00', 0),
 (76, NULL, 'LCWC55494', '', 'FDSS', 2, 'Intact', 'Active', '2026-05-21', '2026-05-18 18:30:00', '2026-05-23 07:41:36', 0),
 (77, NULL, 'LCWC55495', 'SLERTY', 'FSDS', 2, 'Intact', 'Active', '2026-05-20', '2026-05-17 18:30:00', '2026-05-26 11:13:17', 0),
-(78, '8', '242053', 'SW LWLRRM', 'FDSS', 1, 'Intact', 'Active', '2026-06-28', '2026-05-26 12:12:19', '2026-05-26 12:40:53', 1),
-(79, NULL, '111111', 'AAAAAA', 'FDSS', 2, 'Intact', 'Active', '2026-06-28', '2026-05-27 07:25:50', '2026-05-27 07:26:46', 1);
+(78, '8', '242053', 'SW LWLRRM', 'FDSS', 1, 'Intact', 'Active', '2026-06-28', '2026-05-26 12:12:19', '2026-06-01 13:45:33', 0),
+(79, NULL, '111111', 'SW LWLRRM', 'FDSS', 2, 'Intact', 'Active', '2026-07-01', '2026-05-27 07:25:50', '2026-06-01 13:45:43', 1);
 
 -- --------------------------------------------------------
 
@@ -612,8 +602,33 @@ INSERT INTO `fdss_users` (`user_id`, `user_name`, `user_code`, `username`, `emai
 (2, 'kings', NULL, 'kings', 'kings@gmail.com', '$2y$10$1ayjmt0x/GsO9P9roIU0Fuci5hWqMywFZr6FYSxSKMAA1BCvwJs1y', NULL, '', 'NA', 'dehradun', 'ORG_ADMIN', 1, '2026-04-10', '2026-08-12', 'Active', NULL, '2026-04-10 08:45:10', '2026-05-19 10:18:05'),
 (4, 'admin', NULL, 'admin', 're@gmail.com', '$2y$10$1ayjmt0x/GsO9P9roIU0Fuci5hWqMywFZr6FYSxSKMAA1BCvwJs1y', NULL, NULL, NULL, NULL, 'ADMIN', 1, '2026-04-06', '2026-07-30', 'Active', NULL, '2026-04-06 08:32:59', '2026-05-06 11:42:08'),
 (5, 'Golu', NULL, 'aaa', 'aakh@gmail.com', '$2y$10$7on.bGREoRIspZUXEmKDIuLimMMn9caghLWlzhC5e.LXEAh04iL5q', NULL, 'N/A', 'N/A', NULL, 'AUDITOR', 1, '2026-05-30', '2026-05-30', 'Inactive', 2, '2026-05-06 08:08:19', '2026-05-18 12:27:18'),
-(6, 'akhil gusain', NULL, 'akhil_gusian_12', 'akhilgusain2@mail.com', '$2y$10$wZNR/Ffnno54swOy.G6NC.rbUgxdLf264IFsrk5MPqdSBTR6nT1ZG', NULL, '7830773698', 'Hr', NULL, 'AUDITOR', NULL, NULL, NULL, 'Active', 2, '2026-05-12 08:17:58', '2026-05-12 08:20:25'),
+(6, 'akhil gusain', NULL, 'akhil', 'akhilgusain2@mail.com', '$2y$10$wZNR/Ffnno54swOy.G6NC.rbUgxdLf264IFsrk5MPqdSBTR6nT1ZG', NULL, '7830773698', 'Hr', NULL, 'AUDITOR', NULL, NULL, NULL, 'Active', 2, '2026-05-12 08:17:58', '2026-06-01 13:41:40'),
 (8, 'AG', NULL, 'ag__80', 'ag@gmail.com', '$2y$10$r.1vL/kbHXPHPVEzddXAsefU599ubpBFp2ynWyeqLGC19g4xrr2EW', NULL, '9854587456', 'SE', NULL, 'AUDITOR', NULL, NULL, NULL, 'Active', 1, '2026-05-26 12:38:39', '2026-05-26 12:38:39');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `fdss_warranty_claim`
+--
+
+CREATE TABLE `fdss_warranty_claim` (
+  `warranty_claim_id` int(11) NOT NULL,
+  `schedule_id` int(11) DEFAULT NULL,
+  `unit_id` int(11) DEFAULT NULL,
+  `defectiveCause` varchar(255) DEFAULT NULL,
+  `otherObservation` varchar(255) DEFAULT NULL,
+  `referenceNo` varchar(255) DEFAULT NULL,
+  `suggestion` varchar(255) DEFAULT NULL,
+  `status` varchar(255) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+
+--
+-- Dumping data for table `fdss_warranty_claim`
+--
+
+INSERT INTO `fdss_warranty_claim` (`warranty_claim_id`, `schedule_id`, `unit_id`, `defectiveCause`, `otherObservation`, `referenceNo`, `suggestion`, `status`, `created_at`) VALUES
+(16, 18, 49, 'Hotter ', 'There are some minor bugs on this tool', 'REF:45678', 'Please replace this Toll', 'claim process', '2026-06-01 19:17:42');
 
 -- --------------------------------------------------------
 
@@ -767,6 +782,12 @@ ALTER TABLE `fdss_users`
   ADD KEY `idx_user_email` (`email`);
 
 --
+-- Indexes for table `fdss_warranty_claim`
+--
+ALTER TABLE `fdss_warranty_claim`
+  ADD PRIMARY KEY (`warranty_claim_id`);
+
+--
 -- Indexes for table `fdss_zones`
 --
 ALTER TABLE `fdss_zones`
@@ -782,7 +803,7 @@ ALTER TABLE `fdss_zones`
 -- AUTO_INCREMENT for table `fdds_coach_inspection`
 --
 ALTER TABLE `fdds_coach_inspection`
-  MODIFY `inspection_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `inspection_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=31;
 
 --
 -- AUTO_INCREMENT for table `fdds_inventory_unit`
@@ -800,7 +821,7 @@ ALTER TABLE `fdss_coach_inventory`
 -- AUTO_INCREMENT for table `fdss_coach_schedule`
 --
 ALTER TABLE `fdss_coach_schedule`
-  MODIFY `schedule_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=17;
+  MODIFY `schedule_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
 
 --
 -- AUTO_INCREMENT for table `fdss_divisions`
@@ -812,7 +833,7 @@ ALTER TABLE `fdss_divisions`
 -- AUTO_INCREMENT for table `fdss_Inventory_Management`
 --
 ALTER TABLE `fdss_Inventory_Management`
-  MODIFY `inventory_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
+  MODIFY `inventory_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=37;
 
 --
 -- AUTO_INCREMENT for table `fdss_manufacturers`
@@ -843,6 +864,12 @@ ALTER TABLE `fdss_train_information`
 --
 ALTER TABLE `fdss_users`
   MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+
+--
+-- AUTO_INCREMENT for table `fdss_warranty_claim`
+--
+ALTER TABLE `fdss_warranty_claim`
+  MODIFY `warranty_claim_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=17;
 
 --
 -- AUTO_INCREMENT for table `fdss_zones`
