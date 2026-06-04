@@ -621,6 +621,125 @@ while ($row = $result->fetch_assoc()) {
 
 $stmt->close();
 
+$schedule_rows = [];
+$schedule_summary = [
+    'total' => 0,
+    'pending' => 0,
+    'assigned' => 0,
+    'completed' => 0,
+];
+
+$schedule_has_coach_id = false;
+$schedule_has_coach_no = false;
+$schedule_has_inspection_type = false;
+$schedule_has_special_remarks = false;
+
+$coach_id_column_check = $conn->query("SHOW COLUMNS FROM fdss_coach_schedule LIKE 'coach_id'");
+if ($coach_id_column_check && $coach_id_column_check->num_rows > 0) {
+    $schedule_has_coach_id = true;
+}
+
+$coach_no_column_check = $conn->query("SHOW COLUMNS FROM fdss_coach_schedule LIKE 'coach_no'");
+if ($coach_no_column_check && $coach_no_column_check->num_rows > 0) {
+    $schedule_has_coach_no = true;
+}
+
+$inspection_type_column_check = $conn->query("SHOW COLUMNS FROM fdss_coach_schedule LIKE 'Inspection_Type'");
+if ($inspection_type_column_check && $inspection_type_column_check->num_rows > 0) {
+    $schedule_has_inspection_type = true;
+}
+
+$special_remarks_column_check = $conn->query("SHOW COLUMNS FROM fdss_coach_schedule LIKE 'special_remarks'");
+if ($special_remarks_column_check && $special_remarks_column_check->num_rows > 0) {
+    $schedule_has_special_remarks = true;
+}
+
+$schedule_select_columns = [
+    's.schedule_id',
+    $schedule_has_coach_id ? 's.coach_id' : 'NULL AS coach_id',
+    $schedule_has_coach_no ? 'COALESCE(s.coach_no, c.coach_no) AS coach_no' : 'c.coach_no AS coach_no',
+    's.assignment_date_time',
+    's.last_inspection_date',
+    's.status',
+];
+
+if ($schedule_has_inspection_type) {
+    $schedule_select_columns[] = 's.Inspection_Type';
+} else {
+    $schedule_select_columns[] = 'NULL AS Inspection_Type';
+}
+
+if ($schedule_has_special_remarks) {
+    $schedule_select_columns[] = 's.special_remarks';
+} else {
+    $schedule_select_columns[] = 'NULL AS special_remarks';
+}
+
+$schedule_select_columns[] = 'COALESCE(t.train_no, "") AS train_no';
+$schedule_select_columns[] = 'COALESCE(t.train_name, "") AS train_name';
+
+$schedule_query = "SELECT\n                    " . implode(",\n                    ", $schedule_select_columns) . "\n               FROM fdss_coach_schedule s\n               LEFT JOIN fdss_train_coach c\n                    ON c.coach_id = s.coach_id\n                    AND c.user_id = s.user_id\n               LEFT JOIN fdss_train_information t\n                    ON t.train_info_id = COALESCE(s.train_info_id, c.train_info_id)\n               WHERE s.user_id = ?";
+
+$summary_query = "SELECT\n                    COUNT(*) AS total,\n                    SUM(CASE WHEN s.status = 'Pending' THEN 1 ELSE 0 END) AS pending,\n                    SUM(CASE WHEN s.status = 'Assigned' THEN 1 ELSE 0 END) AS assigned,\n                    SUM(CASE WHEN s.status = 'Completed' THEN 1 ELSE 0 END) AS completed\n               FROM fdss_coach_schedule s\n               LEFT JOIN fdss_train_coach c\n                    ON c.coach_id = s.coach_id\n                    AND c.user_id = s.user_id\n               WHERE s.user_id = ?";
+
+if ($schedule_has_coach_id && $schedule_has_coach_no) {
+    $schedule_query .= " AND (s.coach_id = ? OR s.coach_no = ?)";
+    $summary_query .= " AND (s.coach_id = ? OR s.coach_no = ?)";
+} elseif ($schedule_has_coach_id) {
+    $schedule_query .= " AND s.coach_id = ?";
+    $summary_query .= " AND s.coach_id = ?";
+} elseif ($schedule_has_coach_no) {
+    $schedule_query .= " AND s.coach_no = ?";
+    $summary_query .= " AND s.coach_no = ?";
+} else {
+    $schedule_query .= " AND 0";
+    $summary_query .= " AND 0";
+}
+
+$schedule_stmt = $conn->prepare($schedule_query);
+$summary_stmt = $conn->prepare($summary_query);
+
+if ($schedule_stmt) {
+    if ($schedule_has_coach_id && $schedule_has_coach_no) {
+        $schedule_stmt->bind_param("iis", $user_id, $coach['coach_id'], $coach['coach_no']);
+    } elseif ($schedule_has_coach_id) {
+        $schedule_stmt->bind_param("ii", $user_id, $coach['coach_id']);
+    } elseif ($schedule_has_coach_no) {
+        $schedule_stmt->bind_param("is", $user_id, $coach['coach_no']);
+    } else {
+        $schedule_stmt->bind_param("i", $user_id);
+    }
+    $schedule_stmt->execute();
+    $schedule_result = $schedule_stmt->get_result();
+    while ($row = $schedule_result->fetch_assoc()) {
+        $schedule_rows[] = $row;
+    }
+    $schedule_stmt->close();
+}
+
+if ($summary_stmt) {
+    if ($schedule_has_coach_id && $schedule_has_coach_no) {
+        $summary_stmt->bind_param("iis", $user_id, $coach['coach_id'], $coach['coach_no']);
+    } elseif ($schedule_has_coach_id) {
+        $summary_stmt->bind_param("ii", $user_id, $coach['coach_id']);
+    } elseif ($schedule_has_coach_no) {
+        $summary_stmt->bind_param("is", $user_id, $coach['coach_no']);
+    } else {
+        $summary_stmt->bind_param("i", $user_id);
+    }
+    $summary_stmt->execute();
+    $summary_result = $summary_stmt->get_result();
+    if ($summary_row = $summary_result->fetch_assoc()) {
+        $schedule_summary = [
+            'total' => (int) $summary_row['total'],
+            'pending' => (int) $summary_row['pending'],
+            'assigned' => (int) $summary_row['assigned'],
+            'completed' => (int) $summary_row['completed'],
+        ];
+    }
+    $summary_stmt->close();
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -683,6 +802,14 @@ $stmt->close();
                 Add Coach Component
 
             </button>
+
+            <a class="btn btn-secondary"
+               href="reports.php?coach_id=<?php echo e($coach['coach_id']); ?>&date=<?php echo e(date('Y-m-d')); ?>">
+
+                <i class="bi bi-eye"></i>
+                View Reports
+
+            </a>
 
             <a class="btn btn-primary"
                href="coaches.php">
@@ -824,7 +951,7 @@ $stmt->close();
 
                     <thead>
 
-                    <tr>
+                    <tr> 
 
                         <th>Inventory Name</th>
                         <th>OEM</th>
@@ -945,6 +1072,151 @@ $stmt->close();
 
                                     </button> -->
 
+                                </td>
+
+                            </tr>
+
+                        <?php endforeach; ?>
+
+                    <?php endif; ?>
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="content-card">
+
+        <div class="card-header">
+
+            <div class="d-flex justify-content-between align-items-center">
+
+                <h5>Coach Schedule Details</h5>
+
+                <a class="btn btn-outline-primary btn-sm"
+                   href="reports.php?coach_id=<?php echo e($coach['coach_id']); ?>&date=<?php echo e(date('Y-m-d')); ?>">
+                    <i class="bi bi-eye"></i>
+                    View Reports
+                </a>
+
+            </div>
+
+        </div>
+
+        <div class="card-body">
+
+            <div class="row g-3 mb-3">
+
+                <div class="col-md-3 col-sm-6">
+                    <div class="quick-box">
+                        <h6>Total Schedules</h6>
+                        <p><strong><?php echo number_format($schedule_summary['total']); ?></strong></p>
+                    </div>
+                </div>
+
+                <div class="col-md-3 col-sm-6">
+                    <div class="quick-box">
+                        <h6>Completed</h6>
+                        <p><strong><?php echo number_format($schedule_summary['completed']); ?></strong></p>
+                    </div>
+                </div>
+
+                <div class="col-md-3 col-sm-6">
+                    <div class="quick-box">
+                        <h6>Assigned</h6>
+                        <p><strong><?php echo number_format($schedule_summary['assigned']); ?></strong></p>
+                    </div>
+                </div>
+
+                <div class="col-md-3 col-sm-6">
+                    <div class="quick-box">
+                        <h6>Pending</h6>
+                        <p><strong><?php echo number_format($schedule_summary['pending']); ?></strong></p>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="table-wrapper">
+
+                <table class="table table-hover">
+
+                    <thead>
+
+                    <tr>
+                        <th>#</th>
+                        <th>Schedule ID</th>
+                        <th>Train</th>
+                        <th>Assignment Date</th>
+                        <th>Last Inspection</th>
+                        <th>Status</th>
+                        <th>Type</th>
+                        <th>Remarks</th>
+                        <th>Action</th>
+                    </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                    <?php if (empty($schedule_rows)): ?>
+
+                        <tr>
+
+                            <td colspan="9" class="text-center text-muted py-4">
+
+                                No schedule records found for this coach.
+
+                            </td>
+
+                        </tr>
+
+                    <?php else: ?>
+
+                        <?php foreach ($schedule_rows as $index => $schedule): ?>
+
+                            <tr>
+
+                                <td><?php echo e($index + 1); ?></td>
+
+                                <td><?php echo e($schedule['schedule_id']); ?></td>
+
+                                <td>
+                                    <?php echo e($schedule['train_no'] ?: '-'); ?>
+                                    <?php if ($schedule['train_name']): ?>
+                                        - <?php echo e($schedule['train_name']); ?>
+                                    <?php endif; ?>
+                                </td>
+
+                                <td>
+                                    <?php echo $schedule['assignment_date_time'] ? date('d M Y h:i A', strtotime($schedule['assignment_date_time'])) : '-'; ?>
+                                </td>
+
+                                <td>
+                                    <?php echo $schedule['last_inspection_date'] ? date('d M Y', strtotime($schedule['last_inspection_date'])) : '-'; ?>
+                                </td>
+
+                                <td>
+                                    <span class="badge <?php echo ($schedule['status'] === 'Completed') ? 'badge-success' : (($schedule['status'] === 'Assigned') ? 'badge-info' : 'badge-warning'); ?>">
+                                        <?php echo e($schedule['status'] ?: '-'); ?>
+                                    </span>
+                                </td>
+
+                                <td><?php echo e($schedule['Inspection_Type'] ?: '-'); ?></td>
+
+                                <td><?php echo e($schedule['special_remarks'] ?: '-'); ?></td>
+
+                                <td>
+                                    <a class="btn btn-sm btn-outline-secondary"
+                                       href="reports.php?coach_id=<?php echo e($coach['coach_id']); ?>&date=<?php echo e(date('Y-m-d')); ?>">
+                                        <i class="bi bi-arrow-right-circle"></i>
+                                        View Schedule
+                                    </a>
                                 </td>
 
                             </tr>
