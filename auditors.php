@@ -47,32 +47,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = "Username already exists. Please try again.";
             $message_type = "danger";
         } else {
-            // Hash password
             $password_hash = password_hash($password, PASSWORD_BCRYPT);
-            
-            // Insert into fdss_users table with AUDITOR role
-   $station_id = null;
+            $station_id    = null;
 
-            $insert_query = "INSERT INTO fdss_users (user_name, username, email, password_hash, phone, designation, role, station_id, status, created_by_user_id) VALUES (?, ?, ?, ?, ?, ?, 'AUDITOR', ?, ?, ?)";
-            $insert_stmt = $conn->prepare($insert_query);
-           $insert_stmt->bind_param(
-    "ssssssisi",
-    $full_name,
-    $username,
-    $email,
-    $password_hash,
-    $phone,
-    $designation,
-    $station_id,
-    $status,
-    $_SESSION['user_id']
-);
-            
+            // Handle profile image upload
+            $profile_path  = null;
+            $upload_debug  = '';
+            if (!isset($_FILES['profile']) || empty($_FILES['profile']['name'])) {
+                $upload_debug = 'NO_FILE_RECEIVED';
+            } elseif ($_FILES['profile']['error'] !== UPLOAD_ERR_OK) {
+                $upload_debug = 'UPLOAD_ERROR_CODE:' . $_FILES['profile']['error'];
+            } else {
+                $ext = strtolower(pathinfo($_FILES['profile']['name'], PATHINFO_EXTENSION));
+                if (!in_array($ext, ['jpg','jpeg','png','webp','gif'], true)) {
+                    $upload_debug = 'BAD_EXT:' . $ext;
+                } elseif ($_FILES['profile']['size'] > 2 * 1024 * 1024) {
+                    $upload_debug = 'FILE_TOO_LARGE';
+                } else {
+                    $upload_dir = __DIR__ . '/uploads/profiles/';
+                    if (!is_dir($upload_dir)) { mkdir($upload_dir, 0755, true); }
+                    $file_name = 'profile_' . time() . '_' . rand(1000, 9999) . '.' . $ext;
+                    if (move_uploaded_file($_FILES['profile']['tmp_name'], $upload_dir . $file_name)) {
+                        $profile_path = 'uploads/profiles/' . $file_name;
+                        $upload_debug = 'SUCCESS:' . $profile_path;
+                    } else {
+                        $upload_debug = 'MOVE_FAILED — dir:' . $upload_dir . ' writable:' . (is_writable($upload_dir) ? 'yes' : 'no');
+                    }
+                }
+            }
+
+            // Check if profile column exists (auto-create if missing)
+            $col_res = $conn->query("SHOW COLUMNS FROM fdss_users LIKE 'profile'");
+            if ($col_res && $col_res->num_rows === 0) {
+                $conn->query("ALTER TABLE fdss_users ADD COLUMN profile VARCHAR(255) DEFAULT NULL");
+            }
+
+            $insert_query = "INSERT INTO fdss_users (user_name, username, email, password_hash, phone, designation, role, station_id, status, created_by_user_id, profile) VALUES (?, ?, ?, ?, ?, ?, 'AUDITOR', ?, ?, ?, ?)";
+            $insert_stmt  = $conn->prepare($insert_query);
+            $insert_stmt->bind_param(
+                "ssssssisis",
+                $full_name, $username, $email, $password_hash,
+                $phone, $designation, $station_id, $status,
+                $_SESSION['user_id'], $profile_path
+            );
+
             if ($insert_stmt->execute()) {
-                $message = "Auditor added successfully! Generated Username: <strong>$username</strong>";
+                $message = "Auditor added! Username: <strong>$username</strong> | Upload: <code>$upload_debug</code>";
                 $message_type = "success";
             } else {
-                $message = "Error adding auditor: " . $conn->error;
+                $message = "DB Error: " . $conn->error . " | Upload: <code>$upload_debug</code>";
                 $message_type = "danger";
             }
             $insert_stmt->close();
@@ -155,7 +178,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Fetch all auditors created by the logged-in user from database
 $auditors = [];
-$query = "SELECT user_id, user_name, email, designation, username, status, phone, created_by_user_id FROM fdss_users WHERE role = 'AUDITOR' AND created_by_user_id = ? ORDER BY user_id DESC";
+$query = "SELECT u.user_id, u.user_name, u.email, u.designation, u.username, u.status, u.phone,
+                 u.created_by_user_id, u.created_at, u.profile,
+                 org.user_name AS org_name,
+                 st.station_name, d.division_name, z.zone_name
+          FROM fdss_users u
+          LEFT JOIN fdss_users org ON org.user_id = u.created_by_user_id
+          LEFT JOIN fdss_stations st ON st.station_id = org.station_id
+          LEFT JOIN fdss_divisions d ON d.division_id = st.division_id
+          LEFT JOIN fdss_zones z ON z.zone_id = d.zone_id
+          WHERE u.role = 'AUDITOR' AND u.created_by_user_id = ?
+          ORDER BY u.user_id DESC";
 $stmt = $conn->prepare($query);
 $stmt->bind_param("i", $_SESSION['user_id']);
 $stmt->execute();
@@ -252,18 +285,32 @@ $stmt->close();
                                             <td><?php echo htmlspecialchars($auditor['designation'] ?? 'N/A'); ?></td>
                                             <td><?php echo htmlspecialchars($auditor['phone'] ?? 'N/A'); ?></td>
                                             <td>
-                                                <?php 
-                                              $status_class = ($auditor['status'] === 'Active') ? 'badge-success' : 'badge-danger';
-                                                ?>
+                                                <?php $status_class = ($auditor['status'] === 'Active') ? 'badge-success' : 'badge-danger'; ?>
                                                 <span class="badge <?php echo $status_class; ?>"><?php echo htmlspecialchars($auditor['status']); ?></span>
                                             </td>
                                             <td>
-                                                <button class="btn btn-sm btn-outline-primary" onclick="editAuditor(<?php echo htmlspecialchars($auditor['user_id']); ?>)" data-bs-toggle="modal" data-bs-target="#auditorModal">
-                                                    <i class="bi bi-pencil"></i>
-                                                </button>
-                                                <!-- <button class="btn btn-sm btn-outline-danger" onclick="deleteAuditor(<?php echo htmlspecialchars($auditor['user_id']); ?>)">
-                                                    <i class="bi bi-trash"></i>
-                                                </button> -->
+                                                <div class="d-flex gap-1">
+                                                    <button class="btn btn-sm btn-outline-primary" onclick="editAuditor(<?php echo $auditor['user_id']; ?>)" data-bs-toggle="modal" data-bs-target="#auditorModal">
+                                                        <i class="bi bi-pencil"></i>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-outline-dark"
+                                                        onclick="showIdCard(this)"
+                                                        data-bs-toggle="modal" data-bs-target="#idCardModal"
+                                                        data-id="<?php echo $auditor['user_id']; ?>"
+                                                        data-name="<?php echo htmlspecialchars($auditor['user_name']); ?>"
+                                                        data-designation="<?php echo htmlspecialchars($auditor['designation'] ?? ''); ?>"
+                                                        data-username="<?php echo htmlspecialchars($auditor['username']); ?>"
+                                                        data-phone="<?php echo htmlspecialchars($auditor['phone'] ?? ''); ?>"
+                                                        data-email="<?php echo htmlspecialchars($auditor['email'] ?? ''); ?>"
+                                                        data-status="<?php echo htmlspecialchars($auditor['status']); ?>"
+                                                        data-station="<?php echo htmlspecialchars($auditor['station_name'] ?? ''); ?>"
+                                                        data-division="<?php echo htmlspecialchars($auditor['division_name'] ?? ''); ?>"
+                                                        data-zone="<?php echo htmlspecialchars($auditor['zone_name'] ?? ''); ?>"
+                                                        data-issued="<?php echo $auditor['created_at'] ? date('d M Y', strtotime($auditor['created_at'])) : date('d M Y'); ?>"
+                                                        data-profile="<?php echo htmlspecialchars($auditor['profile'] ?? ''); ?>">
+                                                        <i class="bi bi-person-badge"></i> ID Card
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -283,7 +330,7 @@ $stmt->close();
                     <h5 class="modal-title">Add New Auditor</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <form method="POST" action="">
+                <form method="POST" action="" enctype="multipart/form-data">
                     <input type="hidden" name="action" id="formAction" value="add_auditor">
                     <input type="hidden" name="user_id" id="editingAuditorId" value="">
                     <div class="modal-body">
@@ -310,6 +357,15 @@ $stmt->close();
                                 <option value="Inactive">Inactive</option>
                             </select>
                         </div>
+                        <div class="form-group mb-3" id="profileGroup">
+                            <label class="form-label">Profile Photo</label>
+                            <input type="file" class="form-control" id="auditorProfile" name="profile" accept="image/*">
+                            <div id="profilePreview" class="mt-2" style="display:none; text-align:center;">
+                                <img id="profilePreviewImg" src="" alt="Preview"
+                                     style="width:80px;height:80px;object-fit:cover;border-radius:50%;border:2px solid #003580;">
+                            </div>
+                            <small class="text-muted">Max 2 MB. JPG, PNG, WebP, GIF supported.</small>
+                        </div>
                         <div class="form-group mb-3" id="passwordGroup">
                             <label class="form-label">Password <span class="text-danger">*</span></label>
                             <input type="password" class="form-control" id="auditorPassword" name="password" placeholder="Enter password" required>
@@ -325,7 +381,112 @@ $stmt->close();
         </div>
     </div>
 
-           <?php include('includes/footer.php'); ?>
+    <!-- ID CARD MODAL -->
+    <div class="modal fade" id="idCardModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
+            <div class="modal-content border-0 bg-transparent shadow-none">
+                <div class="modal-header border-0 pb-0 justify-content-end">
+                    <button type="button" class="btn btn-sm btn-light me-1" onclick="printIdCard()">
+                        <i class="bi bi-printer"></i> Print
+                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body pt-1 pb-3 px-2">
+                    <div id="idCardFront"><!-- injected by JS --></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* ID card base */
+        .id-card {
+            width: 360px; margin: 0 auto;
+            border-radius: 12px; overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,.28);
+            font-family: Arial, sans-serif;
+            background: #fff;
+            border: 1px solid #ccc;
+        }
+        /* top band */
+        .idc-top {
+            background: #003580;
+            padding: 14px 16px 10px;
+            display: flex; align-items: center; gap: 12px;
+            border-bottom: 4px solid #f5a623;
+        }
+        .idc-top-logo svg { width: 42px; height: 42px; flex-shrink:0; }
+        .idc-top-text { color: #fff; line-height: 1.3; }
+        .idc-top-text .t1 { font-size: .78rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+        .idc-top-text .t2 { font-size: .64rem; opacity: .8; }
+
+        /* body */
+        .idc-body { padding: 16px 18px 12px; }
+        .idc-photo-row { display: flex; gap: 16px; align-items: flex-start; }
+        .idc-photo {
+            width: 76px; height: 88px; flex-shrink: 0;
+            border: 3px solid #003580; border-radius: 6px;
+            background: #e8eef8;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2.6rem; color: #003580;
+        }
+        .idc-info { flex: 1; }
+        .idc-name { font-size: 1rem; font-weight: 700; color: #111; line-height: 1.25; }
+        .idc-desig { font-size: .72rem; color: #003580; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-top: 3px; }
+        .idc-role-badge {
+            display: inline-block; margin-top: 5px;
+            padding: 2px 9px; border-radius: 20px;
+            background: #f5a623; color: #111;
+            font-size: .62rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+        }
+
+        /* details table */
+        .idc-table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: .75rem; }
+        .idc-table tr td { padding: 4px 2px; vertical-align: top; }
+        .idc-table tr td:first-child { color: #888; font-weight: 600; width: 85px; text-transform: uppercase; font-size: .67rem; letter-spacing: .05em; }
+        .idc-table tr td:last-child { color: #111; font-weight: 500; }
+        .idc-divider { border: none; border-top: 1px solid #e8e8e8; margin: 10px 0 8px; }
+
+        /* bottom band */
+        .idc-bottom {
+            background: #002060;
+            padding: 8px 16px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .idc-bottom .loc { font-size: .65rem; color: rgba(255,255,255,.8); line-height: 1.5; }
+        .idc-bottom .loc strong { display: block; color: #fff; font-size: .72rem; }
+        .idc-status-dot {
+            width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+        }
+        .dot-active   { background: #4ade80; }
+        .dot-inactive { background: #f87171; }
+
+        /* barcode strip */
+        .idc-barcode {
+            background: #f5f5f5;
+            padding: 8px 16px;
+            display: flex; align-items: center; justify-content: space-between;
+            border-top: 1px solid #e0e0e0;
+        }
+        .idc-barcode .bars { display: flex; gap: 2px; align-items: flex-end; height: 22px; }
+        .idc-barcode .bars span {
+            display: inline-block; width: 2px; background: #333;
+        }
+        .idc-barcode .uid { font-family: 'Courier New', monospace; font-size: .65rem; color: #555; letter-spacing: .1em; }
+
+        /* print */
+        @media print {
+            body * { visibility: hidden !important; }
+            #idCardPrintArea, #idCardPrintArea * { visibility: visible !important; }
+            #idCardPrintArea {
+                position: fixed; top: 10mm; left: 50%; transform: translateX(-50%);
+                z-index: 9999;
+            }
+            .modal-header { display: none !important; }
+        }
+    </style>
+
+    <?php include('includes/footer.php'); ?>
 
     <!-- <div id="footer-placeholder"></div> -->
 
@@ -393,6 +554,87 @@ $stmt->close();
             resetForm();
             auditorModal.show();
         });
+
+        /* ── ID CARD ── */
+        function showIdCard(btn) {
+            const d = btn.dataset;
+            const uid = 'AUD-' + String(d.id).padStart(5, '0');
+
+            // Generate random-looking barcode bars
+            const barHeights = [18,10,18,14,22,8,18,12,20,10,16,22,10,18,14,8,20,16,12,18];
+            const bars = barHeights.map(h =>
+                `<span style="height:${h}px"></span>`
+            ).join('');
+
+            const statusDot = d.status === 'Active' ? 'dot-active' : 'dot-inactive';
+
+            const html = `
+            <div id="idCardPrintArea">
+            <div class="id-card">
+
+                <!-- top band -->
+                <div class="idc-top">
+                    <div class="idc-top-logo">
+                     <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTMSC9E6Pi54WGmLwxPJ5lTJUDiUgMQAqhl6w&s" alt="IR Logo" width="40" height="40"> 
+                    </div>
+                    <div class="idc-top-text">
+                        <div class="t1">Indian Railways</div>
+                        <div class="t2">FDSS / FSDS — Fire Detection &amp; Suppression System</div>
+                    </div>
+                </div>
+
+                <!-- body -->
+                <div class="idc-body">
+                    <div class="idc-photo-row">
+                        <div class="idc-photo">${d.profile
+                            ? `<img src="${escHtml(d.profile)}" style="width:70px;height:82px;object-fit:cover;border-radius:4px;">`
+                            : '<i class="bi bi-person-fill"></i>'}</div>
+                        <div class="idc-info">
+                            <div class="idc-name">${escHtml(d.name)}</div>
+                            <div class="idc-desig">${escHtml(d.designation || 'Auditor')}</div>
+                            <span class="idc-role-badge">Auditor</span>
+                        </div>
+                    </div>
+                    <hr class="idc-divider">
+                    <table class="idc-table">
+                        <tr><td>ID</td><td><strong>${uid}</strong></td></tr>
+                        <tr><td>Username</td><td>${escHtml(d.username)}</td></tr>
+                        <tr><td>Phone</td><td>${escHtml(d.phone || '—')}</td></tr>
+                        <tr><td>Email</td><td>${escHtml(d.email || '—')}</td></tr>
+                        <tr><td>Issued</td><td>${escHtml(d.issued)}</td></tr>
+                    </table>
+                </div>
+
+                <!-- bottom location band -->
+                <div class="idc-bottom">
+                    <div class="loc">
+                        <strong>${escHtml(d.zone || '—')}</strong>
+                        ${escHtml(d.division || '—')} · ${escHtml(d.station || '—')}
+                    </div>
+                    <div class="idc-status-dot ${statusDot}" title="${escHtml(d.status)}"></div>
+                </div>
+
+                <!-- barcode strip -->
+                <div class="idc-barcode">
+                    <div class="bars">${bars}</div>
+                    <span class="uid">${uid}</span>
+                </div>
+
+            </div>
+            </div>`;
+
+            document.getElementById('idCardFront').innerHTML = html;
+        }
+
+        function printIdCard() {
+            window.print();
+        }
+
+        function escHtml(str) {
+            return String(str || '')
+                .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
 
         // Close modal event - reset form
         auditorModalEl.addEventListener('hidden.bs.modal', function() {
