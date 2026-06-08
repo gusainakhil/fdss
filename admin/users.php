@@ -348,6 +348,9 @@ if ($stmt) {
                                     <td><?php echo e(date('d M Y', strtotime($user['created_at']))); ?></td>
                                     <td class="text-end">
                                         <div class="d-inline-flex gap-2">
+                                            <a class="btn btn-sm btn-outline-info" href="user-view.php?user_id=<?php echo e($user['user_id']); ?>" target="_blank">
+                                                <i class="bi bi-eye"></i> View
+                                            </a>
                                             <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#editUserModal<?php echo e($user['user_id']); ?>">
                                                 <i class="bi bi-pencil-square"></i> Edit
                                             </button>
