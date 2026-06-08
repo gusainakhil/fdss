@@ -122,6 +122,7 @@ $assigned_schedules = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_coach
 $completed_schedules = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_coach_schedule WHERE user_id = ? AND status = 'Completed'", "i", $user_id);
 
 $subscription_days = 0;
+$sub_end_date_str = '';
 $sub_stmt = $conn->prepare("SELECT end_date FROM fdss_users WHERE user_id = ? LIMIT 1");
 if ($sub_stmt) {
     $sub_stmt->bind_param("i", $user_id);
@@ -132,6 +133,7 @@ if ($sub_stmt) {
             $today_date = new DateTime(date('Y-m-d'));
             $end_date = new DateTime($sub_row['end_date']);
             $subscription_days = max(0, (int)$today_date->diff($end_date)->format('%r%a'));
+            $sub_end_date_str = $end_date->format('Y-m-d') . ' 23:59:59';
         }
     }
     $sub_stmt->close();
@@ -409,10 +411,10 @@ $warranty_claim_fsds = get_count($conn, "
 
 <body>
 
-<?php include('includes/navbar.php'); ?>
+<?php include 'includes/navbar.php'; ?>
 
 <div class="sidebar-container">
-    <?php include('includes/sidebar.php'); ?>
+    <?php include 'includes/sidebar.php'; ?>
 </div>
 
 <main class="main-content">
@@ -683,7 +685,7 @@ $warranty_claim_fsds = get_count($conn, "
     </div>
 </main>
 
-<?php include('includes/footer.php'); ?>
+<?php include 'includes/footer.php'; ?>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
 
@@ -779,6 +781,143 @@ new Chart(document.getElementById('oemMakersChart'), {
 </script>
 
 <script src="assets/js/layout.js"></script>
+
+<?php if ($subscription_days <= 10 && $sub_end_date_str !== ''): ?>
+<?php
+    $now_dt     = new DateTime();
+    $end_dt     = new DateTime($sub_end_date_str);
+    $is_expired = $now_dt > $end_dt;   // subscription time actually over
+
+    if ($is_expired) {
+        // Fully expired — lock the modal
+        $modal_color = '#dc3545';
+        $modal_bg    = '#fff5f5';
+        $badge_class = 'danger';
+        $icon        = 'bi-exclamation-octagon-fill';
+        $dismissible = false;
+    } elseif ($subscription_days <= 3) {
+        // ≤3 days left but NOT expired yet (includes last-day / <24 h) — red but closable
+        $modal_color = '#dc3545';
+        $modal_bg    = '#fff5f5';
+        $badge_class = 'danger';
+        $icon        = 'bi-exclamation-triangle-fill';
+        $dismissible = true;
+    } elseif ($subscription_days <= 7) {
+        $modal_color = '#ffc107';
+        $modal_bg    = '#fffbf0';
+        $badge_class = 'warning';
+        $icon        = 'bi-exclamation-triangle-fill';
+        $dismissible = true;
+    } else {
+        $modal_color = '#198754';
+        $modal_bg    = '#f0fff4';
+        $badge_class = 'success';
+        $icon        = 'bi-bell-fill';
+        $dismissible = true;
+    }
+?>
+<!-- Subscription Expiry Modal -->
+<div class="modal fade" id="subExpiryModal" tabindex="-1"
+     data-bs-backdrop="<?= $dismissible ? 'true' : 'static' ?>"
+     data-bs-keyboard="<?= $dismissible ? 'true' : 'false' ?>"
+     aria-labelledby="subExpiryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border: 2px solid <?= $modal_color ?>; border-radius: 12px; overflow: hidden;">
+            <div class="modal-header" style="background: <?= $modal_color ?>; border: none;">
+                <div class="d-flex align-items-center gap-2 w-100">
+                    <i class="bi <?= $icon ?> fs-4 text-white"></i>
+                    <h5 class="modal-title text-white fw-bold mb-0" id="subExpiryModalLabel">
+                        Subscription Expiry Alert
+                    </h5>
+                </div>
+                <?php if ($dismissible): ?>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <?php endif; ?>
+            </div>
+            <div class="modal-body text-center py-4" style="background: <?= $modal_bg ?>;">
+                <p class="mb-1 text-muted">Your subscription expires in</p>
+                <div class="d-flex justify-content-center gap-3 my-3">
+                    <div class="text-center">
+                        <div id="subCountDays" class="fw-bold fs-2" style="color: <?= $modal_color ?>; min-width: 60px;">--</div>
+                        <div class="small text-muted">Days</div>
+                    </div>
+                    <div class="fw-bold fs-2" style="color: <?= $modal_color ?>; line-height: 1.2;">:</div>
+                    <div class="text-center">
+                        <div id="subCountHours" class="fw-bold fs-2" style="color: <?= $modal_color ?>; min-width: 60px;">--</div>
+                        <div class="small text-muted">Hours</div>
+                    </div>
+                    <div class="fw-bold fs-2" style="color: <?= $modal_color ?>; line-height: 1.2;">:</div>
+                    <div class="text-center">
+                        <div id="subCountMins" class="fw-bold fs-2" style="color: <?= $modal_color ?>; min-width: 60px;">--</div>
+                        <div class="small text-muted">Mins</div>
+                    </div>
+                    <div class="fw-bold fs-2" style="color: <?= $modal_color ?>; line-height: 1.2;">:</div>
+                    <div class="text-center">
+                        <div id="subCountSecs" class="fw-bold fs-2" style="color: <?= $modal_color ?>; min-width: 60px;">--</div>
+                        <div class="small text-muted">Secs</div>
+                    </div>
+                </div>
+                <p class="mb-3" style="color: <?= $modal_color ?>; font-weight: 600;">
+                    <?php if ($subscription_days === 0): ?>
+                        Your subscription has expired! Please renew immediately.
+                    <?php else: ?>
+                        Please renew your subscription before it expires.
+                    <?php endif; ?>
+                </p>
+                <span class="badge bg-<?= $badge_class ?> px-3 py-2 fs-6">
+                    Expires: <?= date('d M Y', strtotime($sub_end_date_str)) ?>
+                </span>
+            </div>
+            <?php if ($dismissible): ?>
+            <div class="modal-footer justify-content-center" style="background: <?= $modal_bg ?>; border: none;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Remind me later</button>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const endTime = new Date('<?= $sub_end_date_str ?>').getTime();
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    function tick() {
+        const now  = Date.now();
+        const diff = endTime - now;
+
+        if (diff <= 0) {
+            document.getElementById('subCountDays').textContent  = '00';
+            document.getElementById('subCountHours').textContent = '00';
+            document.getElementById('subCountMins').textContent  = '00';
+            document.getElementById('subCountSecs').textContent  = '00';
+            return;
+        }
+
+        const days  = Math.floor(diff / 86400000);
+        const hours = Math.floor((diff % 86400000) / 3600000);
+        const mins  = Math.floor((diff % 3600000)  / 60000);
+        const secs  = Math.floor((diff % 60000)    / 1000);
+
+        document.getElementById('subCountDays').textContent  = pad(days);
+        document.getElementById('subCountHours').textContent = pad(hours);
+        document.getElementById('subCountMins').textContent  = pad(mins);
+        document.getElementById('subCountSecs').textContent  = pad(secs);
+    }
+
+    tick();
+    setInterval(tick, 1000);
+
+    const modalEl = document.getElementById('subExpiryModal');
+    const modal   = new bootstrap.Modal(modalEl, {
+        backdrop: <?= $dismissible ? "'true'" : "'static'" ?>,
+        keyboard: <?= $dismissible ? 'true' : 'false' ?>
+    });
+    modal.show();
+})();
+</script>
+<?php endif; ?>
 
 </body>
 </html>
