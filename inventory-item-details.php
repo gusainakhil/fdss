@@ -35,17 +35,48 @@ $trains = [];
 $coaches = [];
 $message = '';
 $message_type = '';
+if (isset($_SESSION['flash_message'])) {
+    $message = $_SESSION['flash_message'];
+    $message_type = $_SESSION['flash_message_type'] ?? 'success';
+    unset($_SESSION['flash_message'], $_SESSION['flash_message_type']);
+}
 $unit_has_use_status = false;
+$unit_has_unit_status = false;
 
 $use_status_check = $conn->query("SHOW COLUMNS FROM fdds_inventory_unit LIKE 'use_status'");
 if ($use_status_check && $use_status_check->num_rows > 0) {
     $unit_has_use_status = true;
 }
 
+$unit_status_check = $conn->query("SHOW COLUMNS FROM fdds_inventory_unit LIKE 'unit_status'");
+if ($unit_status_check && $unit_status_check->num_rows > 0) {
+    $unit_has_unit_status = true;
+} elseif ($unit_status_check !== false) {
+    $conn->query("ALTER TABLE fdds_inventory_unit ADD COLUMN unit_status VARCHAR(50) DEFAULT 'Working' AFTER notes");
+    if ($conn->errno === 0) {
+        $unit_has_unit_status = true;
+    }
+}
+
+$unit_has_category = false;
+$category_check = $conn->query("SHOW COLUMNS FROM fdds_inventory_unit LIKE 'category'");
+if ($category_check && $category_check->num_rows > 0) {
+    $unit_has_category = true;
+} elseif ($category_check !== false) {
+    $conn->query("ALTER TABLE fdds_inventory_unit ADD COLUMN category VARCHAR(50) DEFAULT NULL AFTER notes");
+    if ($conn->errno === 0) {
+        $unit_has_category = true;
+    }
+}
+
+$unit_status_select = $unit_has_unit_status ? 'unit_status' : "'' AS unit_status";
+$unit_category_select = $unit_has_category ? 'category' : "'' AS category";
+
 if ($inventory_id > 0) {
     $query = "SELECT inventory_id, item_code, item_name, quantity, category, status, remarks
               FROM fdss_Inventory_Management
-              WHERE inventory_id = ? AND user_id = ?";
+              WHERE inventory_id = ? AND user_id = ?
+              AND category IN ('FDSS', 'FSDS')";
     $stmt = $conn->prepare($query);
     $stmt->bind_param('ii', $inventory_id, $user_id);
     $stmt->execute();
@@ -54,9 +85,12 @@ if ($inventory_id > 0) {
     $stmt->close();
 }
 
-if ($item && in_array(strtoupper(trim((string) $item['category'])), ['FDSS', 'FSDS'], true)) {
-    header('Location: add-fsds-fdds-inventory.php?inventory_id=' . urlencode((string) $inventory_id));
-    exit;
+$category = '';
+if ($item) {
+    $category = strtoupper(trim($_GET['category'] ?? '')) ?: strtoupper(trim((string) $item['category']));
+    if (!in_array($category, ['FDSS', 'FSDS'], true)) {
+        $category = strtoupper(trim((string) $item['category']));
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_units') {
@@ -65,19 +99,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $newPurchases = $_POST['new_purchase'] ?? [];
     $newWarrantyExpires = $_POST['new_warranty_expire'] ?? [];
     $newManufacturerIds = $_POST['new_manufacturer'] ?? [];
+    $newUnitStatuses = $_POST['new_unit_status'] ?? [];
     $newCoachIds = $_POST['new_coach_id'] ?? [];
+    $allowed_unit_statuses = ['warranty_claim_process', 'Working', 'Replacement', 'Not_working'];
+    $allowed_categories = ['FDSS', 'FSDS'];
 
     if ($inventory_id > 0) {
         $conn->begin_transaction();
         try {
-            if ($unit_has_use_status) {
-                $insertQuery = "INSERT INTO fdds_inventory_unit
-                    (inventory_id, user_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes, use_status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            if ($unit_has_unit_status) {
+                if ($unit_has_use_status) {
+                    if ($unit_has_category) {
+                        $insertQuery = "INSERT INTO fdds_inventory_unit
+                            (inventory_id, user_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes, category, unit_status, use_status)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    } else {
+                        $insertQuery = "INSERT INTO fdds_inventory_unit
+                            (inventory_id, user_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes, unit_status, use_status)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    }
+                } else {
+                    if ($unit_has_category) {
+                        $insertQuery = "INSERT INTO fdds_inventory_unit
+                            (inventory_id, user_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes, category, unit_status)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    } else {
+                        $insertQuery = "INSERT INTO fdds_inventory_unit
+                            (inventory_id, user_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes, unit_status)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    }
+                }
+            } elseif ($unit_has_use_status) {
+                if ($unit_has_category) {
+                    $insertQuery = "INSERT INTO fdds_inventory_unit
+                        (inventory_id, user_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes, category, use_status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                } else {
+                    $insertQuery = "INSERT INTO fdds_inventory_unit
+                        (inventory_id, user_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes, use_status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                }
             } else {
-                $insertQuery = "INSERT INTO fdds_inventory_unit
-                    (inventory_id, user_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                if ($unit_has_category) {
+                    $insertQuery = "INSERT INTO fdds_inventory_unit
+                        (inventory_id, user_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes, category)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                } else {
+                    $insertQuery = "INSERT INTO fdds_inventory_unit
+                        (inventory_id, user_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                }
             }
             $insertStmt = $conn->prepare($insertQuery);
             $coachCheckStmt = $conn->prepare("SELECT coach_id FROM fdss_train_coach WHERE coach_id = ? AND user_id = ? LIMIT 1");
@@ -91,12 +162,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 $purchase = trim($newPurchases[$i] ?? '');
                 $warrantyExpire = trim($newWarrantyExpires[$i] ?? '');
                 $manufacturerId = (int) ($newManufacturerIds[$i] ?? 0) ?: null;
+                $unitStatus = trim($newUnitStatuses[$i] ?? '');
                 $note = '';
                 $coachId = (int) ($newCoachIds[$i] ?? 0);
                 $useStatus = $coachId > 0 ? 1 : 0;
 
-                // Only insert if at least one field is filled
-                if (!empty($serial) || !empty($model) || !empty($purchase) || !empty($warrantyExpire) || !empty($manufacturerId) || $coachId > 0) {
+                $hasAnyField = $serial !== '' || $model !== '' || $purchase !== '' || $warrantyExpire !== '' || $manufacturerId !== null || $unitStatus !== '' || $coachId > 0;
+                if ($hasAnyField) {
+                    if ($serial === '' || $model === '' || $purchase === '' || $warrantyExpire === '' || $manufacturerId === null || $unitStatus === '') {
+                        throw new Exception('All fields except Train and Coach are required for each unit row.');
+                    }
+                    if (!in_array($unitStatus, $allowed_unit_statuses, true)) {
+                        throw new Exception('Invalid unit status selected.');
+                    }
+
                     if ($coachId > 0) {
                         $coachCheckStmt->bind_param('ii', $coachId, $user_id);
                         $coachCheckStmt->execute();
@@ -109,10 +188,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                         $coachCheckResult->free();
                     }
 
-                    if ($unit_has_use_status) {
-                        $insertStmt->bind_param('iissssisi', $inventory_id, $user_id, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $useStatus);
+                    $categoryValue = $category;
+                    if (!in_array($categoryValue, $allowed_categories, true)) {
+                        throw new Exception('Invalid category configured for this inventory item.');
+                    }
+
+                    if ($unit_has_unit_status) {
+                        if ($unit_has_use_status) {
+                            if ($unit_has_category) {
+                                $insertStmt->bind_param('iissssisssi', $inventory_id, $user_id, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $categoryValue, $unitStatus, $useStatus);
+                            } else {
+                                $insertStmt->bind_param('iissssissi', $inventory_id, $user_id, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $unitStatus, $useStatus);
+                            }
+                        } else {
+                            if ($unit_has_category) {
+                                $insertStmt->bind_param('iissssisss', $inventory_id, $user_id, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $categoryValue, $unitStatus);
+                            } else {
+                                $insertStmt->bind_param('iissssiss', $inventory_id, $user_id, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $unitStatus);
+                            }
+                        }
+                    } elseif ($unit_has_use_status) {
+                        if ($unit_has_category) {
+                            $insertStmt->bind_param('iissssissi', $inventory_id, $user_id, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $categoryValue, $useStatus);
+                        } else {
+                            $insertStmt->bind_param('iissssisi', $inventory_id, $user_id, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $useStatus);
+                        }
                     } else {
-                        $insertStmt->bind_param('iissssis', $inventory_id, $user_id, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note);
+                        if ($unit_has_category) {
+                            $insertStmt->bind_param('iissssiss', $inventory_id, $user_id, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $categoryValue);
+                        } else {
+                            $insertStmt->bind_param('iissssis', $inventory_id, $user_id, $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note);
+                        }
                     }
                     $insertStmt->execute();
                     $newUnitId = (int) $conn->insert_id;
@@ -148,11 +254,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $conn->commit();
             $message = "Added {$newRowCount} new unit(s) successfully. {$assignedRowCount} assigned to coach. Total count: {$totalCount}.";
             $message_type = 'success';
+            $_SESSION['flash_message'] = $message;
+            $_SESSION['flash_message_type'] = $message_type;
             
             // Reload existing units
             $existing_units = [];
             if ($item) {
-                $unit_query = "SELECT unit_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes
+                $unit_query = "SELECT unit_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes, $unit_status_select, $unit_category_select
                                FROM fdds_inventory_unit
                                WHERE inventory_id = ? AND user_id = ?
                                ORDER BY unit_id ASC";
@@ -185,44 +293,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     $purchase = trim($_POST['edit_purchase'] ?? '');
     $warrantyExpire = trim($_POST['edit_warranty_expire'] ?? '');
     $manufacturerId = (int) ($_POST['edit_manufacturer'] ?? 0) ?: null;
+    $categoryValue = $category;
+    $unitStatus = trim($_POST['edit_unit_status'] ?? '');
     $note = '';
+    $allowed_unit_statuses = ['warranty_claim_process', 'Working', 'Replacement', 'Not_working'];
+    $allowed_categories = ['FDSS', 'FSDS'];
 
     if ($unitId > 0 && $inventory_id > 0) {
-        $updateQuery = "UPDATE fdds_inventory_unit 
-                        SET serial_number = ?, model_number = ?, purchase_date = ?, warranty_expire = ?, manufacturer_id = ?, notes = ?
-                        WHERE unit_id = ? AND inventory_id = ? AND user_id = ?";
-        $updateStmt = $conn->prepare($updateQuery);
-        $updateStmt->bind_param('ssssisiii', $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $unitId, $inventory_id, $user_id);
-        
-        if ($updateStmt->execute()) {
-            $message = "Unit updated successfully.";
-            $message_type = 'success';
-            
-            // Reload existing units
-            $existing_units = [];
-            if ($item) {
-                $unit_query = "SELECT unit_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes
-                               FROM fdds_inventory_unit
-                               WHERE inventory_id = ? AND user_id = ?
-                               ORDER BY unit_id ASC";
-                $unit_stmt = $conn->prepare($unit_query);
-                $unit_stmt->bind_param('ii', $inventory_id, $user_id);
-                $unit_stmt->execute();
-                $unit_result = $unit_stmt->get_result();
-                while ($unit_row = $unit_result->fetch_assoc()) {
-                    $existing_units[] = $unit_row;
-                }
-                $unit_stmt->close();
-            }
-            
-            // Redirect to clear POST data and prevent duplicate submission
-            header("Location: " . $_SERVER['REQUEST_URI']);
-            exit;
-        } else {
-            $message = "Error updating unit: " . $updateStmt->error;
+        if ($serial === '' || $model === '' || $purchase === '' || $warrantyExpire === '' || $manufacturerId === null || $unitStatus === '') {
+            $message = 'All fields except Train and Coach are required for unit updates.';
             $message_type = 'danger';
+        } elseif (!in_array($unitStatus, $allowed_unit_statuses, true) || !in_array($categoryValue, $allowed_categories, true)) {
+            $message = 'Invalid unit status or category selected.';
+            $message_type = 'danger';
+        } else {
+            if ($unit_has_unit_status) {
+                if ($unit_has_category) {
+                    $updateQuery = "UPDATE fdds_inventory_unit 
+                                    SET serial_number = ?, model_number = ?, purchase_date = ?, warranty_expire = ?, manufacturer_id = ?, notes = ?, category = ?, unit_status = ?
+                                    WHERE unit_id = ? AND inventory_id = ? AND user_id = ?";
+                    $updateStmt = $conn->prepare($updateQuery);
+                    $updateStmt->bind_param('ssssisssiii', $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $categoryValue, $unitStatus, $unitId, $inventory_id, $user_id);
+                } else {
+                    $updateQuery = "UPDATE fdds_inventory_unit 
+                                    SET serial_number = ?, model_number = ?, purchase_date = ?, warranty_expire = ?, manufacturer_id = ?, notes = ?, unit_status = ?
+                                    WHERE unit_id = ? AND inventory_id = ? AND user_id = ?";
+                    $updateStmt = $conn->prepare($updateQuery);
+                    $updateStmt->bind_param('ssssissiii', $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $unitStatus, $unitId, $inventory_id, $user_id);
+                }
+            } else {
+                $updateQuery = "UPDATE fdds_inventory_unit 
+                                SET serial_number = ?, model_number = ?, purchase_date = ?, warranty_expire = ?, manufacturer_id = ?, notes = ?
+                                WHERE unit_id = ? AND inventory_id = ? AND user_id = ?";
+                $updateStmt = $conn->prepare($updateQuery);
+                $updateStmt->bind_param('ssssisiii', $serial, $model, $purchase, $warrantyExpire, $manufacturerId, $note, $unitId, $inventory_id, $user_id);
+            }
+
+            if ($updateStmt->execute()) {
+                $message = "Unit updated successfully.";
+                $message_type = 'success';
+                $_SESSION['flash_message'] = $message;
+                $_SESSION['flash_message_type'] = $message_type;
+
+                // Reload existing units
+                $existing_units = [];
+                if ($item) {
+                    $unit_query = "SELECT unit_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes, $unit_status_select, $unit_category_select
+                                   FROM fdds_inventory_unit
+                                   WHERE inventory_id = ? AND user_id = ?
+                                   ORDER BY unit_id ASC";
+                    $unit_stmt = $conn->prepare($unit_query);
+                    $unit_stmt->bind_param('ii', $inventory_id, $user_id);
+                    $unit_stmt->execute();
+                    $unit_result = $unit_stmt->get_result();
+                    while ($unit_row = $unit_result->fetch_assoc()) {
+                        $existing_units[] = $unit_row;
+                    }
+                    $unit_stmt->close();
+                }
+
+                // Redirect to clear POST data and prevent duplicate submission
+                header("Location: " . $_SERVER['REQUEST_URI']);
+                exit;
+            } else {
+                $message = "Error updating unit: " . $updateStmt->error;
+                $message_type = 'danger';
+            }
+            $updateStmt->close();
         }
-        $updateStmt->close();
     }
 }
 
@@ -236,6 +374,8 @@ if ($item) {
                        iu.warranty_expire,
                        iu.manufacturer_id,
                        iu.notes,
+                       $unit_status_select,
+                       $unit_category_select,
                        $use_status_select,
                        ci.coach_id,
                        c.coach_no,
@@ -449,6 +589,7 @@ function e($value) {
                                     <th>Train</th>
                                     <th>Coach</th>
                                     <th>OEM</th>
+                                    <th>Unit Status</th>
                                     <th class="text-center">Actions</th>
                                 </tr>
                             </thead>
@@ -500,6 +641,8 @@ function e($value) {
                                     <th>Train</th>
                                     <th>Coach</th>
                                     <th>OEM</th>
+                                    <th>Category</th>
+                                    <th>Unit Status</th>
                                     <th>Status</th>
                                     <th class="text-center no-print no-export">Actions</th>
                                 </tr>
@@ -538,6 +681,8 @@ function e($value) {
                                                 }
                                             ?>
                                         </td>
+                                        <td><?php echo e($unit['category'] ?? '-'); ?></td>
+                                        <td><?php echo e($unit['unit_status'] ?? '-'); ?></td>
                                         <td>
                                             <?php if ($is_used): ?>
                                                 <span class="badge bg-secondary">Used</span>
@@ -552,7 +697,8 @@ function e($value) {
                                                     data-model="<?php echo e($unit['model_number']); ?>"
                                                     data-purchase="<?php echo e($unit['purchase_date']); ?>"
                                                     data-warranty="<?php echo e($unit['warranty_expire']); ?>"
-                                                    data-manufacturer="<?php echo e($unit['manufacturer_id']); ?>">
+                                                    data-manufacturer="<?php echo e($unit['manufacturer_id']); ?>"
+                                                    data-unit-status="<?php echo e($unit['unit_status'] ?? ''); ?>">
                                                 <i class="bi bi-pencil"></i> Edit
                                             </button>
                                         </td>
@@ -608,12 +754,23 @@ function e($value) {
 
                     <div class="mb-3">
                         <label for="editWarrantyExpire" class="form-label">Warranty Expire</label>
-                        <input type="date" class="form-control" id="editWarrantyExpire" name="edit_warranty_expire">
+                        <input type="date" class="form-control" id="editWarrantyExpire" name="edit_warranty_expire" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="editUnitStatus" class="form-label">Unit Status</label>
+                        <select class="form-select" id="editUnitStatus" name="edit_unit_status" required>
+                            <option value="">Select Unit Status</option>
+                            <option value="warranty_claim_process">Warranty Claim Process</option>
+                            <option value="Working">Working</option>
+                            <option value="Replacement">Replacement</option>
+                            <option value="Not_working">Not Working</option>
+                        </select>
                     </div>
                     
                     <div class="mb-3">
                         <label for="editManufacturer" class="form-label">OEM</label>
-                        <select class="form-select" id="editManufacturer" name="edit_manufacturer">
+                        <select class="form-select" id="editManufacturer" name="edit_manufacturer" required>
                             <option value="">Select OEM</option>
                             <?php foreach ($manufacturers as $m): ?>
                                 <option value="<?php echo e($m['manufacturer_id']); ?>">
@@ -732,15 +889,16 @@ function e($value) {
         const purchaseValue = escapeHtml(data.purchase_date || '');
         const warrantyValue = escapeHtml(data.warranty_expire || '');
         const manufacturerValue = escapeHtml(data.manufacturer_id || '');
+        const statusValue = escapeHtml(data.unit_status || '');
         const trainOptionsHtml = createTrainOptions();
 
         const row = document.createElement('tr');
         row.innerHTML = `
             <td class="align-middle">${index}</td>
-            <td><input type="text" class="form-control form-control-sm" name="new_serial[]" placeholder="Serial #" value="${serialValue}"></td>
-            <td><input type="text" class="form-control form-control-sm" name="new_model[]" placeholder="Model #" value="${modelValue}"></td>
-            <td><input type="date" class="form-control form-control-sm" name="new_purchase[]" value="${purchaseValue}"></td>
-            <td><input type="date" class="form-control form-control-sm" name="new_warranty_expire[]" value="${warrantyValue}"></td>
+            <td><input type="text" class="form-control form-control-sm" name="new_serial[]" placeholder="Serial #" value="${serialValue}" required></td>
+            <td><input type="text" class="form-control form-control-sm" name="new_model[]" placeholder="Model #" value="${modelValue}" required></td>
+            <td><input type="date" class="form-control form-control-sm" name="new_purchase[]" value="${purchaseValue}" required></td>
+            <td><input type="date" class="form-control form-control-sm" name="new_warranty_expire[]" value="${warrantyValue}" required></td>
             <td>
                 <select class="form-select form-select-sm unit-train-select" name="new_train_info_id[]">
                     ${trainOptionsHtml}
@@ -752,8 +910,17 @@ function e($value) {
                 </select>
             </td>
             <td>
-                <select class="form-select form-select-sm" name="new_manufacturer[]">
+                <select class="form-select form-select-sm" name="new_manufacturer[]" required>
                     ${optionsHtml}
+                </select>
+            </td>
+            <td>
+                <select class="form-select form-select-sm" name="new_unit_status[]" required>
+                    <option value="">Select status</option>
+                    <option value="warranty_claim_process">Warranty Claim Process</option>
+                    <option value="Working">Working</option>
+                    <option value="Replacement">Replacement</option>
+                    <option value="Not_working">Not Working</option>
                 </select>
             </td>
             <td class="text-center align-middle">
@@ -765,6 +932,10 @@ function e($value) {
         const select = row.querySelector('[name="new_manufacturer[]"]');
         if (select && manufacturerValue) {
             select.value = manufacturerValue;
+        }
+        const statusSelect = row.querySelector('[name="new_unit_status[]"]');
+        if (statusSelect && statusValue) {
+            statusSelect.value = statusValue;
         }
         row.querySelector('.unit-train-select')?.addEventListener('change', () => {
             setCoachOptions(row);
@@ -820,7 +991,7 @@ function e($value) {
     }
 
     function downloadCsv() {
-        const rows = [['Unit #', 'Serial Number', 'Model Number', 'Purchase Date', 'Warranty Expire', 'Train', 'Coach', 'Manufacturer']];
+        const rows = [['Unit #', 'Serial Number', 'Model Number', 'Purchase Date', 'Warranty Expire', 'Train', 'Coach', 'Manufacturer', 'Unit Status']];
         const rowCount = getRowCount();
         for (let i = 1; i <= rowCount; i++) {
             const serial = document.querySelectorAll('[name="new_serial[]"]')[i - 1]?.value || '';
@@ -833,7 +1004,8 @@ function e($value) {
             const manufacturerSelect = document.querySelectorAll('[name="new_manufacturer[]"]')[i - 1];
             const manufacturer = manufacturerSelect ? manufacturerSelect.options[manufacturerSelect.selectedIndex]?.text || '' : '';
             const warranty = document.querySelectorAll('[name="new_warranty_expire[]"]')[i - 1]?.value || '';
-            rows.push([i, serial, model, purchase, warranty, train, coach, manufacturer]);
+            const status = document.querySelectorAll('[name="new_unit_status[]"]')[i - 1]?.value || '';
+            rows.push([i, serial, model, purchase, warranty, train, coach, manufacturer, status]);
         }
 
         const csvContent = rows.map(r => r.map(v => `"${(v || '').toString().replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -924,6 +1096,7 @@ function e($value) {
             const purchase = this.getAttribute('data-purchase');
             const warranty = this.getAttribute('data-warranty');
             const manufacturer = this.getAttribute('data-manufacturer');
+            const unitStatus = this.getAttribute('data-unit-status');
 
             document.getElementById('editUnitId').value = unitId;
             document.getElementById('editSerial').value = serial || '';
@@ -931,6 +1104,7 @@ function e($value) {
             document.getElementById('editPurchase').value = purchase || '';
             document.getElementById('editWarrantyExpire').value = warranty || '';
             document.getElementById('editManufacturer').value = manufacturer || '';
+            document.getElementById('editUnitStatus').value = unitStatus || '';
 
             editUnitModal.show();
         });

@@ -13,7 +13,7 @@ $message = '';
 $message_type = '';
 $user_id = (int)$_SESSION['user_id'];
 $item_code_prefix = 'INV-WC-';
-$allowed_categories = ['FDSS', 'FSDS', 'Primary', 'Secondary'];
+$allowed_categories = ['FDSS', 'FSDS'];
 
 if (isset($_GET['parameter_added'])) {
     $added_count = max(0, (int) $_GET['parameter_added']);
@@ -51,10 +51,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add_inventory') {
         $item_code = trim($_POST['item_code'] ?? '');
         $item_name = trim($_POST['item_name'] ?? '');
-        $status = $_POST['status'] ?? 'Working';
-        $category = $_POST['category'] ?? 'Primary';
+        $category = $_POST['category'] ?? 'FDSS';
         $category = in_array($category, $allowed_categories, true) ? $category : 'FDSS';
-        $remarks = trim($_POST['remarks'] ?? '');
+        $status = 'Working';
+        $remarks = '';
 
         if ($item_code === '' || $item_name === '') {
             $message = "Please fill all required fields.";
@@ -103,10 +103,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     elseif ($action === 'edit_inventory') {
         $inventory_id = (int)($_POST['inventory_id'] ?? 0);
         $item_name = trim($_POST['item_name'] ?? '');
-        $status = $_POST['status'] ?? 'Working';
-        $category = $_POST['category'] ?? 'Primary';
-        $category = in_array($category, $allowed_categories, true) ? $category : 'FDSS';
-        $remarks = trim($_POST['remarks'] ?? '');
 
         $check_query = "SELECT inventory_id, item_code FROM fdss_Inventory_Management
                         WHERE user_id = ? AND inventory_id = ?";
@@ -121,16 +117,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $item_code = $check_result->fetch_assoc()['item_code'];
             $update_query = "UPDATE fdss_Inventory_Management 
-                SET item_name = ?, status = ?, category = ?, remarks = ?, last_updated = CURRENT_TIMESTAMP
+                SET item_name = ?, last_updated = CURRENT_TIMESTAMP
                 WHERE inventory_id = ? AND user_id = ?";
 
             $stmt = $conn->prepare($update_query);
             $stmt->bind_param(
-                "ssssii",
+                "sii",
                 $item_name,
-                $status,
-                $category,
-                $remarks,
                 $inventory_id,
                 $user_id
             );
@@ -173,7 +166,7 @@ $inventory_items = [];
 $query = "SELECT inventory_id, item_code, item_name, status, category, user_id, last_updated, remarks, created_at, updated_at
           FROM fdss_Inventory_Management
           WHERE user_id = ?
-          AND category IN ('FDSS', 'FSDS', 'Primary', 'Secondary')
+          AND category IN ('FDSS', 'FSDS')
           ORDER BY inventory_id DESC";
 
 $stmt = $conn->prepare($query);
@@ -213,13 +206,20 @@ $next_item_code = generate_next_item_code($conn, $item_code_prefix);
                 <h1>Inventory Management</h1>
                 <p class="page-header-subtitle">Manage stock levels and track components</p>
                 <p class="text-danger mb-0">
-                   Firstly, add the parameters of FDSS and FSDS <a href="add-parameter.php" class="text-danger fw-semibold">click here</a>
+                   Firstly, Add the Inventory Items of FDSS and FSDS click On "Add Inventory" Button. <br> Then create the FDSS and FSDS by clicking on "Create FDSS" and "Create FSDS" buttons respectively.
                 </p>
             </div>
             <div class="page-header-actions">
-                <a href="add-parameter.php" class="btn btn-outline-primary">
+                <!-- <a href="add-parameter.php" class="btn btn-outline-primary">
                     <i class="bi bi-sliders"></i> Add Parameter
+                </a> -->
+                 <a href="add-fsds-fdds-inventory.php?category=FDSS" class="btn btn-primary">
+                    <i class="bi bi-plus-circle"></i> Create  FDSS
                 </a>
+                 <a href="add-fsds-fdds-inventory.php?category=FSDS" class=" btn btn-primary">
+                    <i class="bi bi-plus-circle"></i> Create FSDS 
+                </a>
+                
                 <button class="btn btn-primary" id="addInventoryBtn" data-bs-toggle="modal" data-bs-target="#inventoryModal">
                     <i class="bi bi-plus-circle"></i> Add Inventory
                 </button>
@@ -263,14 +263,9 @@ $next_item_code = generate_next_item_code($conn, $item_code_prefix);
                             </tr>
                         <?php else: ?>
                             <?php foreach ($inventory_items as $item): ?>
-                                <?php
-                                    $details_page = in_array($item['category'], ['FDSS', 'FSDS'], true)
-                                        ? 'add-fsds-fdds-inventory.php'
-                                        : 'inventory-item-details.php';
-                                ?>
                                 <tr>
                                     <td>
-                                        <a href="<?php echo htmlspecialchars($details_page); ?>?inventory_id=<?php echo htmlspecialchars($item['inventory_id']); ?>" target="_blank" class="text-decoration-none">
+                                        <a href="inventory-item-details.php?inventory_id=<?php echo htmlspecialchars($item['inventory_id']); ?>" target="_blank" class="text-decoration-none">
                                             <?php echo htmlspecialchars($item['item_code']); ?>
                                         </a>
                                     </td>
@@ -290,9 +285,7 @@ $next_item_code = generate_next_item_code($conn, $item_code_prefix);
                                                 '<?php echo htmlspecialchars($item['inventory_id']); ?>',
                                                 '<?php echo htmlspecialchars(addslashes($item['item_code'])); ?>',
                                                 '<?php echo htmlspecialchars(addslashes($item['item_name'])); ?>',
-                                                '<?php echo htmlspecialchars($item['status']); ?>',
-                                                '<?php echo htmlspecialchars($item['category']); ?>',
-                                                '<?php echo htmlspecialchars(addslashes($item['remarks'] ?? '')); ?>'
+                                                '<?php echo htmlspecialchars($item['category']); ?>'
                                             )"
                                             data-bs-toggle="modal"
                                             data-bs-target="#inventoryModal">
@@ -354,23 +347,7 @@ $next_item_code = generate_next_item_code($conn, $item_code_prefix);
                         <select class="form-select" id="itemCategory" name="category" required>
                             <option value="FDSS">FDSS</option>
                             <option value="FSDS">FSDS</option>
-                            <option value="Primary">Primary</option>
-                            <option value="Secondary">Secondary</option>
                         </select>
-                    </div>
-
-                    <div class="form-group mb-3">
-                        <label class="form-label">Status <span class="text-danger">*</span></label>
-                        <select class="form-select" id="itemStatus" name="status" required>
-                            <option value="Working">Working</option>
-                            <option value="Needs Check">Needs Check</option>
-                            <option value="Not Working">Not Working</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group mb-3">
-                        <label class="form-label">Remarks</label>
-                        <textarea class="form-control" id="itemRemarks" name="remarks" rows="3" placeholder="Enter remarks"></textarea>
                     </div>
                 </div>
 
@@ -408,21 +385,21 @@ function resetInventoryForm() {
     document.getElementById('itemCode').value = nextItemCode;
     document.getElementById('itemName').value = '';
     document.getElementById('itemCategory').value = 'FDSS';
-    document.getElementById('itemStatus').value = 'Working';
-    document.getElementById('itemRemarks').value = '';
+    document.getElementById('itemCode').readOnly = false;
+    document.getElementById('itemCategory').disabled = false;
 
     formAction.value = 'add_inventory';
     modalTitle.textContent = 'Add Inventory Item';
     submitInventoryBtn.textContent = 'Add Item';
 }
 
-function editInventory(id, itemCode, itemName, status, category, remarks) {
+function editInventory(id, itemCode, itemName, category) {
     document.getElementById('inventoryId').value = id;
     document.getElementById('itemCode').value = itemCode;
     document.getElementById('itemName').value = itemName;
-    document.getElementById('itemStatus').value = status;
     document.getElementById('itemCategory').value = category;
-    document.getElementById('itemRemarks').value = remarks;
+    document.getElementById('itemCode').readOnly = true;
+    document.getElementById('itemCategory').disabled = true;
 
     formAction.value = 'edit_inventory';
     modalTitle.textContent = 'Edit Component Item';

@@ -9,8 +9,59 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-$user_id = (int) $_SESSION['user_id'];
+$user_id  = (int) $_SESSION['user_id'];
 $claim_id = (int) ($_GET['claim_id'] ?? 0);
+
+$message      = '';
+$message_type = '';
+
+// Auto-add claim_complete_date column if missing
+$col_check = $conn->query("SHOW TABLES LIKE 'fdss_warranty_claim'");
+if ($col_check && $col_check->num_rows > 0) {
+    if (!$conn->query("SHOW COLUMNS FROM fdss_warranty_claim LIKE 'claim_complete_date'")->num_rows) {
+        $conn->query("ALTER TABLE fdss_warranty_claim ADD COLUMN `claim_complete_date` DATE NULL");
+    }
+    if (!$conn->query("SHOW COLUMNS FROM fdss_warranty_claim LIKE 'complete_remark'")->num_rows) {
+        $conn->query("ALTER TABLE fdss_warranty_claim ADD COLUMN `complete_remark` TEXT NULL");
+    }
+}
+
+// Handle status update POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'complete_claim') {
+    $post_claim_id       = (int) ($_POST['claim_id'] ?? 0);
+    $claim_complete_date = trim($_POST['claim_complete_date'] ?? '');
+    $complete_remark     = trim($_POST['complete_remark'] ?? '');
+
+    if ($post_claim_id <= 0) {
+        $message      = 'Invalid claim ID.';
+        $message_type = 'danger';
+    } else {
+        $upd = $conn->prepare("
+            UPDATE fdss_warranty_claim
+            SET status = 'complete',
+                claim_complete_date = ?,
+                complete_remark = ?
+            WHERE warranty_claim_id = ?
+              AND COALESCE(
+                  (SELECT user_id FROM fdss_coach_schedule WHERE schedule_id = fdss_warranty_claim.schedule_id LIMIT 1),
+                  (SELECT user_id FROM fdds_inventory_unit WHERE unit_id = fdss_warranty_claim.unit_id LIMIT 1)
+              ) = ?
+        ");
+        if ($upd) {
+            $date_val    = $claim_complete_date !== '' ? $claim_complete_date : null;
+            $remark_val  = $complete_remark !== '' ? $complete_remark : null;
+            $upd->bind_param('ssii', $date_val, $remark_val, $post_claim_id, $user_id);
+            if ($upd->execute() && $upd->affected_rows > 0) {
+                $message      = 'Claim marked as complete.';
+                $message_type = 'success';
+            } else {
+                $message      = 'Could not update claim.';
+                $message_type = 'danger';
+            }
+            $upd->close();
+        }
+    }
+}
 
 function e($value) {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
@@ -48,7 +99,11 @@ if ($claim_table_exists && $claim_id > 0) {
             wc.referenceNo,
             wc.suggestion,
             wc.status AS claim_status,
+            wc.POH_Date,
+            wc.Production_unit,
             wc.created_at AS claim_created_at,
+            wc.claim_complete_date,
+            wc.complete_remark,
             s.status AS schedule_status,
             s.assignment_date_time,
             s.Inspection_Type,
@@ -256,15 +311,32 @@ $make_serial = display_value(trim((string) ($claim['manufacturer_name'] ?? '')) 
                     <span class="text-muted"> / </span>Claim #<?php echo e($claim_id); ?>
                 </p>
             </div>
-            <div class="no-print d-flex gap-2">
+            <div class="no-print d-flex gap-2 align-items-center">
+                <?php if ($claim): ?>
+                    <span class="badge <?php echo $claim['claim_status'] === 'complete' ? 'bg-success' : 'bg-warning text-dark'; ?> fs-6">
+                        <?php echo e(ucfirst($claim['claim_status'] ?? 'claim process')); ?>
+                    </span>
+                <?php endif; ?>
                 <a href="Warranty-claim-process.php" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left"></i> Back
                 </a>
+                <?php if ($claim && $claim['claim_status'] !== 'complete'): ?>
+                    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#completeModal">
+                        <i class="bi bi-check-circle"></i> Mark Complete
+                    </button>
+                <?php endif; ?>
                 <button type="button" class="btn btn-primary" onclick="window.print()">
                     <i class="bi bi-printer"></i> Print
                 </button>
             </div>
         </div>
+
+        <?php if ($message): ?>
+            <div class="alert alert-<?php echo e($message_type); ?> alert-dismissible fade show no-print" role="alert">
+                <?php echo e($message); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        <?php endif; ?>
 
         <div class="content-card">
             <div class="card-body">
@@ -294,11 +366,11 @@ $make_serial = display_value(trim((string) ($claim['manufacturer_name'] ?? '')) 
                             </tr>
                             <tr>
                                 <td class="label-cell">b. Production unit/Shop</td>
-                                <td class="value-cell">-</td>
+                                <td class="value-cell"><?php echo e($claim['Production_unit']); ?></td>
                             </tr>
                             <tr>
                                 <td class="label-cell">c. POH Date</td>
-                                <td class="value-cell">-</td>
+                                <td class="value-cell"><?php echo e(format_form_date($claim['POH_Date'])); ?></td>
                             </tr>
                             <tr>
                                 <td class="label-cell">d. Return Date</td>
@@ -372,10 +444,10 @@ $make_serial = display_value(trim((string) ($claim['manufacturer_name'] ?? '')) 
                             <tbody>
                                 <tr>
                                     <td>1</td>
-                                    <td></td>
+                                    <td><?php echo e(format_form_date($claim['claim_created_at'])); ?></td>
                                     <td><?php echo e(display_value($claim['referenceNo'])); ?></td>
-                                    <td></td>
-                                    <td><?php echo e(display_value($claim['claim_status'])); ?></td>
+                                    <td><?php echo e(format_form_date($claim['claim_complete_date'])); ?></td>
+                                    <td><?php echo e(ucfirst(display_value($claim['claim_status']))); ?> <?php if (!empty($claim['complete_remark'])): ?><br><small><?php echo e($claim['complete_remark']); ?></small><?php endif; ?></td>
                                 </tr>
                                 <tr>
                                     <td>2</td>
@@ -392,6 +464,44 @@ $make_serial = display_value(trim((string) ($claim['manufacturer_name'] ?? '')) 
         </div>
     </main>
 </div>
+
+<?php if ($claim && $claim['claim_status'] !== 'complete'): ?>
+<div class="modal fade" id="completeModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-check-circle text-success me-2"></i>Mark Claim as Complete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="Warranty-claim-view.php?claim_id=<?php echo e($claim_id); ?>">
+                <input type="hidden" name="action" value="complete_claim">
+                <input type="hidden" name="claim_id" value="<?php echo e($claim_id); ?>">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Claim Complete Date</label>
+                        <input type="date" class="form-control" name="claim_complete_date"
+                               value="<?php echo date('Y-m-d'); ?>" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Remark</label>
+                        <textarea class="form-control" name="complete_remark" rows="3"
+                                  placeholder="Enter any remark..."></textarea>
+                    </div>
+                    <p class="text-muted mb-0 small">
+                        This will update the status from <strong>claim process</strong> to <strong>complete</strong>.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-circle"></i> Confirm Complete
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php include('includes/footer.php'); ?>
 

@@ -137,7 +137,7 @@ if (!in_array($selected_type, $report_types, true)) {
     $selected_type = $report_types[0];
 }
 
-$parameter_category = $selected_type === 'FDSS' ? 'FDSSPARA' : ($selected_type === 'FSDS' ? 'FSDSPARA' : $selected_type . 'PARA');
+$parameter_category = $selected_type;
 $parameters = [];
 
 $parameter_query = "
@@ -192,6 +192,11 @@ foreach ($parameters as $parameter) {
 }
 
 $report_rows = [];
+$wc_select = '';
+$wc_join   = '';
+$has_wc_poh_date        = false;
+$has_wc_production_unit = false;
+
 $schedule_query = "
     SELECT
         s.schedule_id,
@@ -199,7 +204,7 @@ $schedule_query = "
         s.coach_id,
         s.special_remarks,
         s.assignment_date_time,
-        t.train_no,
+        CASE WHEN c.train_info_id IS NULL THEN 'Detached' ELSE t.train_no END AS train_no,
         t.train_name,
         c.coach_no,
         c.coach_type,
@@ -232,6 +237,7 @@ $schedule_query = "
             LIMIT 1
         )
         ) AS assigned_make
+        $wc_select
     FROM fdss_coach_schedule s
     INNER JOIN fdss_train_coach c
         ON c.coach_id = s.coach_id
@@ -239,12 +245,14 @@ $schedule_query = "
     LEFT JOIN fdss_train_information t
         ON t.train_info_id = COALESCE(s.train_info_id, c.train_info_id)
         AND t.user_id = s.user_id
+    $wc_join
     WHERE s.user_id = ?
       AND s.auditor_id IS NOT NULL
       AND s.assignment_date_time IS NOT NULL
       AND DATE(s.assignment_date_time) BETWEEN ? AND ?
       AND UPPER(TRIM(c.coach_type)) = ?
-    ORDER BY t.train_no ASC, c.coach_no ASC, s.assignment_date_time ASC, s.schedule_id ASC
+    ORDER BY CASE WHEN c.train_info_id IS NULL THEN 1 ELSE 0 END ASC,
+             t.train_no ASC, c.coach_no ASC, s.assignment_date_time ASC, s.schedule_id ASC
 ";
 $schedule_stmt = $conn->prepare($schedule_query);
 
@@ -256,12 +264,12 @@ if ($schedule_stmt) {
     while ($row = $schedule_result->fetch_assoc()) {
         $group_key = (string) (int) $row['schedule_id'];
         $report_rows[$group_key] = [
-            'train' => trim((string) ($row['train_no'] ?? '')),
-            'coach' => trim((string) ($row['coach_no'] ?? '')),
+            'train'           => trim((string) ($row['train_no']       ?? '')),
+            'coach'           => trim((string) ($row['coach_no']       ?? '')),
             'coach_body_type' => trim((string) ($row['coach_body_type'] ?? '')),
-            'make' => trim((string) ($row['assigned_make'] ?? '')),
-            'values' => [],
-            'remarks' => trim((string) ($row['special_remarks'] ?? ''))
+            'make'            => trim((string) ($row['assigned_make']  ?? '')),
+            'values'          => [],
+            'remarks'         => trim((string) ($row['special_remarks'] ?? ''))
         ];
     }
 
@@ -715,7 +723,7 @@ $report_rows = array_values($report_rows);
                             <tr>
                                 <th>SL.</th>
                                 <th>Train No.</th>
-                                <th>Coach Type</th>
+                                <th>Coach No.</th>
                                 <th>Make</th>
                                 <?php foreach ($parameters as $parameter): ?>
                                     <th class="parameter-heading" title="<?php echo e($parameter['item_name']); ?>">
@@ -746,9 +754,7 @@ $report_rows = array_values($report_rows);
                                         <td class="text-center"><?php echo $index + 1; ?></td>
                                         <td class="text-center"><?php echo e(display_report_value($row['train'])); ?></td>
                                         <td><?php echo e(display_report_value($row['coach'] . ($row['coach_body_type'] ? ' / ' . $row['coach_body_type'] : ''))); ?></td>
-                                        <td class="text-center">
-                                            <?php echo e(display_report_value($row['make'])); ?>
-                                        </td>
+                                        <td class="text-center"><?php echo e(display_report_value($row['make'])); ?></td>
                                         <?php foreach ($parameters as $parameter): ?>
                                             <?php
                                                 $value = $row['values'][(int) $parameter['inventory_id']] ?? '-';

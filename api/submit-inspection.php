@@ -142,6 +142,8 @@ $other_observation = clean_text($input['otherObservation'] ?? null);
 $reference_no = clean_text($input['referenceNo'] ?? null);
 $remarks = clean_text($input['remarks'] ?? null);
 $suggestion = clean_text($input['suggestion'] ?? null);
+$poh_date        = clean_text($input['POH_Date']       ?? $input['poh_date']        ?? null);
+$production_unit = clean_text($input['Production_unit'] ?? $input['production_unit'] ?? null);
 
 if ($auditor_id <= 0 || $user_id <= 0 || $schedule_id <= 0 || $coach_id <= 0 || ($coach_inventory_id <= 0 && $unit_id <= 0)) {
     send_json(422, [
@@ -254,18 +256,22 @@ $inventory_parameter_id = $inventory['inventory_parameter_id'] !== null
 $coach_no = $coach_no ?: $schedule['db_coach_no'];
 $coach_type = $coach_type ?: $schedule['db_coach_type'];
 $condition = $working_status;
-$warranty_replace_status = 'normal';
-
-if ($part_replaced === 'yes') {
+$input_wrs = strtolower(trim($input['warranty_replace_status'] ?? ''));
+if (in_array($input_wrs, ['warranty', 'replace', 'normal'], true)) {
+    $warranty_replace_status = $input_wrs;
+} elseif ($part_replaced === 'yes') {
     $warranty_replace_status = 'replace';
 } elseif ($in_warranty === 'yes') {
     $warranty_replace_status = 'warranty';
+} else {
+    $warranty_replace_status = 'normal';
 }
 
 $combined_remarks = $remarks;
 
-$inspection_columns_available = db_columns($conn, 'fdds_coach_inspection');
+$inspection_columns_available      = db_columns($conn, 'fdds_coach_inspection');
 $coach_inventory_columns_available = db_columns($conn, 'fdss_coach_inventory');
+$unit_columns_available            = db_columns($conn, 'fdds_inventory_unit');
 $warranty_claim_table = find_table_by_column($conn, 'warranty_claim_id', [
     'fdss_warranty_claim',
     'fdds_warranty_claim',
@@ -274,6 +280,17 @@ $warranty_claim_table = find_table_by_column($conn, 'warranty_claim_id', [
     'fdss_warranty_claims',
     'fdds_warranty_claims'
 ]);
+
+if ($warranty_claim_table) {
+    $wct = $conn->real_escape_string($warranty_claim_table);
+    if (!$conn->query("SHOW COLUMNS FROM `$wct` LIKE 'POH_Date'")->num_rows) {
+        $conn->query("ALTER TABLE `$wct` ADD COLUMN `POH_Date` DATE NULL");
+    }
+    if (!$conn->query("SHOW COLUMNS FROM `$wct` LIKE 'Production_unit'")->num_rows) {
+        $conn->query("ALTER TABLE `$wct` ADD COLUMN `Production_unit` VARCHAR(255) NULL");
+    }
+}
+
 $warranty_claim_columns_available = $warranty_claim_table ? db_columns($conn, $warranty_claim_table) : [];
 
 $conn->begin_transaction();
@@ -295,7 +312,7 @@ try {
     add_if_column($insert_columns, $insert_placeholders, $insert_types, $insert_values, $inspection_columns_available, 'Serial_No', 's', (string) ($inventory['serial_number'] ?? '0'));
     add_if_column($insert_columns, $insert_placeholders, $insert_types, $insert_values, $inspection_columns_available, 'Conditions', 's', $condition);
     add_if_column($insert_columns, $insert_placeholders, $insert_types, $insert_values, $inspection_columns_available, 'unit_id', 'i', $unit_id);
-    add_if_column($insert_columns, $insert_placeholders, $insert_types, $insert_values, $inspection_columns_available, 'status', 's', 'Completed');
+    add_if_column($insert_columns, $insert_placeholders, $insert_types, $insert_values, $inspection_columns_available, 'status', 's', $warranty_replace_status);
     add_if_column($insert_columns, $insert_placeholders, $insert_types, $insert_values, $inspection_columns_available, 'remarks', 's', $combined_remarks);
 
     add_if_column($insert_columns, $insert_placeholders, $insert_types, $insert_values, $inspection_columns_available, 'coach_inventory_id', 'i', $coach_inventory_id);
@@ -340,6 +357,8 @@ try {
         add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'referenceNo', 's', $reference_no);
         add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'suggestion', 's', $suggestion);
         add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'status', 's', 'claim process');
+        add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'POH_Date', 's', $poh_date);
+        add_if_column($claim_columns, $claim_placeholders, $claim_types, $claim_values, $warranty_claim_columns_available, 'Production_unit', 's', $production_unit);
 
         if (isset($warranty_claim_columns_available['created_at'])) {
             $claim_columns[] = '`created_at`';
@@ -360,6 +379,20 @@ try {
 
         $warranty_claim_id = $conn->insert_id;
         $claim_stmt->close();
+
+        if (isset($unit_columns_available['unit_status'])) {
+            $unit_status_stmt = $conn->prepare(
+                "UPDATE fdds_inventory_unit SET unit_status = 'warranty_claim_process' WHERE unit_id = ?"
+            );
+            if (!$unit_status_stmt) {
+                throw new Exception('Unit status update SQL error: ' . $conn->error);
+            }
+            $unit_status_stmt->bind_param('i', $unit_id);
+            if (!$unit_status_stmt->execute()) {
+                throw new Exception('Unit status update failed: ' . $unit_status_stmt->error);
+            }
+            $unit_status_stmt->close();
+        }
     }
 
     $inventory_updates = [];
@@ -370,12 +403,6 @@ try {
         $inventory_updates[] = 'warranty_replace_status = ?';
         $inventory_types .= 's';
         $inventory_values[] = $warranty_replace_status;
-    }
-
-    if (isset($coach_inventory_columns_available['status']) && $part_replaced === 'yes') {
-        $inventory_updates[] = 'status = ?';
-        $inventory_types .= 's';
-        $inventory_values[] = 'Expired';
     }
 
     if (!empty($inventory_updates)) {

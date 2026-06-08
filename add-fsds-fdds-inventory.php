@@ -28,6 +28,7 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = (int) $_SESSION['user_id'];
 $inventory_id = (int) ($_GET['inventory_id'] ?? 0);
+$url_category = strtoupper(trim($_GET['category'] ?? ''));
 $item = null;
 $manufacturers = [];
 $existing_units = [];
@@ -40,6 +41,354 @@ $item_category = '';
 $parameter_category = '';
 $unit_has_use_status = false;
 $unit_has_inventory_parameter_id = false;
+
+// Category bulk entry: shared batch fields + per-item train/coach
+if ($inventory_id === 0 && $url_category !== '') {
+    $allowed_categories = ['FDSS', 'FSDS'];
+    if (!in_array($url_category, $allowed_categories, true)) {
+        header('Location: inventory.php');
+        exit;
+    }
+
+    // Ensure required columns exist
+    foreach ([
+        "token_id VARCHAR(32) DEFAULT NULL",
+        "unit_status VARCHAR(50) DEFAULT 'Working'",
+        "category VARCHAR(50) DEFAULT NULL",
+    ] as $colDef) {
+        $colName = explode(' ', $colDef)[0];
+        $chk = $conn->query("SHOW COLUMNS FROM fdds_inventory_unit LIKE '$colName'");
+        if ($chk && $chk->num_rows === 0) {
+            $conn->query("ALTER TABLE fdds_inventory_unit ADD COLUMN $colDef");
+        }
+    }
+
+    // Flash message
+    $cat_msg = ''; $cat_msg_type = '';
+    if (isset($_SESSION['cat_flash'])) {
+        $cat_msg = $_SESSION['cat_flash'];
+        $cat_msg_type = $_SESSION['cat_flash_type'] ?? 'success';
+        unset($_SESSION['cat_flash'], $_SESSION['cat_flash_type']);
+    }
+
+    // POST handler
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_cat_units') {
+        $token_id  = preg_replace('/[^A-Za-z0-9]/', '', substr($_POST['batch_token']      ?? '', 0, 32));
+        $serial    = trim($_POST['batch_serial']    ?? '');
+        $model     = trim($_POST['batch_model']     ?? '');
+        $purchase  = trim($_POST['batch_purchase']  ?? '');
+        $warranty  = trim($_POST['batch_warranty']  ?? '');
+        $mfg_id    = (int)($_POST['batch_manufacturer'] ?? 0) ?: null;
+        $us        = trim($_POST['batch_unit_status']    ?? 'Working');
+        $train_id  = (int)($_POST['batch_train']          ?? 0);
+        $coach_id  = (int)($_POST['batch_coach']          ?? 0);
+        $rows_data = $_POST['rows'] ?? [];
+        $allowed_statuses = ['warranty_claim_process', 'Working', 'Replacement', 'Not_working'];
+        if (!in_array($us, $allowed_statuses, true)) $us = 'Working';
+        $use_st = ($train_id > 0 || $coach_id > 0) ? 1 : 0;
+
+        if ($serial === '' || $model === '' || $purchase === '' || $warranty === '') {
+            $cat_msg = 'Serial Number, Model Number, Purchase Date and Warranty Expire are required.';
+            $cat_msg_type = 'danger';
+        } else {
+            $saved = 0;
+            $conn->begin_transaction();
+            try {
+                $ins = $conn->prepare(
+                    "INSERT INTO fdds_inventory_unit
+                     (inventory_id, user_id, token_id, serial_number, model_number, purchase_date, warranty_expire, manufacturer_id, notes, category, unit_status, use_status)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                );
+                if (!$ins) throw new Exception('Prepare failed: ' . $conn->error);
+
+                // Validate batch coach once
+                if ($coach_id > 0) {
+                    $co_chk = $conn->prepare("SELECT coach_id FROM fdss_train_coach WHERE coach_id = ? AND user_id = ? LIMIT 1");
+                    if ($co_chk) {
+                        $co_chk->bind_param('ii', $coach_id, $user_id);
+                        $co_chk->execute();
+                        if ($co_chk->get_result()->num_rows === 0) throw new Exception("Selected coach not found.");
+                        $co_chk->close();
+                    }
+                }
+                $assign = $conn->prepare("INSERT INTO fdss_coach_inventory (coach_id, inventory_unit_id, user_id, status) VALUES (?, ?, ?, 'Active')");
+
+                $note = '';
+                foreach ($rows_data as $rd) {
+                    $inv_id = (int)($rd['inventory_id'] ?? 0);
+                    if ($inv_id <= 0) continue;
+
+                    // types: i,i,s,s,s,s,s,i,s,s,s,i
+                    $ins->bind_param('iisssssisssi', $inv_id, $user_id, $token_id, $serial, $model, $purchase, $warranty, $mfg_id, $note, $url_category, $us, $use_st);
+                    if (!$ins->execute()) throw new Exception('Insert failed: ' . $ins->error);
+                    $new_uid = $conn->insert_id;
+
+                    if ($coach_id > 0 && $assign) {
+                        $assign->bind_param('iii', $coach_id, $new_uid, $user_id);
+                        $assign->execute();
+                    }
+
+                    $qty_s = $conn->prepare("UPDATE fdss_Inventory_Management SET quantity = (SELECT COUNT(*) FROM fdds_inventory_unit WHERE inventory_id = ?) WHERE inventory_id = ? AND user_id = ?");
+                    if ($qty_s) { $qty_s->bind_param('iii', $inv_id, $inv_id, $user_id); $qty_s->execute(); $qty_s->close(); }
+                    $saved++;
+                }
+                if ($assign) $assign->close();
+                $ins->close();
+                $conn->commit();
+                $_SESSION['cat_flash']      = "$saved unit(s) saved successfully.";
+                $_SESSION['cat_flash_type'] = 'success';
+                header('Location: add-fsds-fdds-inventory.php?category=' . urlencode($url_category));
+                exit;
+            } catch (Exception $e) {
+                $conn->rollback();
+                $cat_msg = 'Error: ' . $e->getMessage();
+                $cat_msg_type = 'danger';
+            }
+        }
+    }
+
+    // Fetch items
+    $cat_items = [];
+    $s = $conn->prepare("SELECT inventory_id, item_code, item_name FROM fdss_Inventory_Management WHERE user_id = ? AND UPPER(TRIM(category)) = ? ORDER BY item_name ASC");
+    if ($s) { $s->bind_param('is', $user_id, $url_category); $s->execute(); $res = $s->get_result(); while ($row = $res->fetch_assoc()) { $cat_items[] = $row; } $s->close(); }
+
+    // Auto-generate one batch token
+    $batch_token = strtoupper(bin2hex(random_bytes(8)));
+
+    // Fetch manufacturers
+    $cat_mfg = [];
+    $s = $conn->prepare("SELECT manufacturer_id, company_name, name FROM fdss_manufacturers WHERE user_id = ? ORDER BY company_name");
+    if ($s) { $s->bind_param('i', $user_id); $s->execute(); $res = $s->get_result(); while ($row = $res->fetch_assoc()) { $cat_mfg[] = $row; } $s->close(); }
+
+    // Fetch trains
+    $cat_trains = [];
+    $s = $conn->prepare("SELECT train_info_id, train_no, train_name FROM fdss_train_information WHERE user_id = ? AND status = 'Active' ORDER BY train_no");
+    if ($s) { $s->bind_param('i', $user_id); $s->execute(); $res = $s->get_result(); while ($row = $res->fetch_assoc()) { $cat_trains[] = $row; } $s->close(); }
+
+    // Fetch coaches
+    $cat_coaches = [];
+    $s = $conn->prepare("SELECT coach_id, coach_no, coach_type, train_info_id FROM fdss_train_coach WHERE user_id = ? AND status = 'Active' ORDER BY coach_no");
+    if ($s) { $s->bind_param('i', $user_id); $s->execute(); $res = $s->get_result(); while ($row = $res->fetch_assoc()) { $cat_coaches[] = $row; } $s->close(); }
+
+    function esc($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
+
+    $mfg_opts = '<option value="">Select OEM</option>';
+    foreach ($cat_mfg as $m) {
+        $label = trim($m['company_name'] . ($m['name'] ? ' - ' . $m['name'] : ''));
+        $mfg_opts .= '<option value="' . esc($m['manufacturer_id']) . '">' . esc($label) . '</option>';
+    }
+    $train_opts = '<option value="">-- Select --</option>';
+    $train_opts .= '<option value="Detached">Detach</option>';
+    foreach ($cat_trains as $t) {
+        $train_opts .= '<option value="' . esc($t['train_info_id']) . '">' . esc($t['train_no'] . ' - ' . $t['train_name']) . '</option>';
+    }
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?= esc($url_category) ?> Unit Entry - FDSS Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.0/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="assets/css/styles.css" rel="stylesheet">
+    <style>
+        .table th, .table td { vertical-align: middle; white-space: nowrap; font-size: 0.85rem; }
+        .token-box { font-family: monospace; font-size: 0.9rem; letter-spacing: 2px; color: #0d6efd; font-weight: 600; }
+        .batch-card { border-left: 4px solid #0d6efd; }
+    </style>
+</head>
+<body>
+<?php include 'includes/navbar.php'; ?>
+<div class="sidebar-container">
+    <?php include 'includes/sidebar.php'; ?>
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1><?= esc($url_category) ?> — Add Units</h1>
+                <p class="page-header-subtitle">Fill batch details once — same values will apply to all <?= esc($url_category) ?> items below</p>
+            </div>
+            <div class="page-header-actions">
+                <a href="inventory.php" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back to Inventory</a>
+            </div>
+        </div>
+
+        <?php if ($cat_msg): ?>
+            <div class="alert alert-<?= esc($cat_msg_type) ?> alert-dismissible fade show">
+                <i class="bi bi-<?= $cat_msg_type === 'success' ? 'check-circle' : 'exclamation-triangle' ?>"></i>
+                <?= esc($cat_msg) ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        <?php endif; ?>
+
+        <?php if (empty($cat_items)): ?>
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle"></i>
+                No <?= esc($url_category) ?> items found. Please <a href="inventory.php">add items</a> to inventory first.
+            </div>
+        <?php else: ?>
+        <form method="POST" id="catUnitForm" novalidate>
+            <input type="hidden" name="action" value="save_cat_units">
+
+            <!-- Batch Info Card -->
+            <div class="content-card batch-card mb-4">
+                <div class="card-header">
+                    <h5><i class="bi bi-layers"></i> Batch Information <span class="text-muted fw-normal small">(Same for all items — fields marked * are required)</span></h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Token ID</label>
+                            <div class="token-box border rounded px-3 py-2 bg-light"><?= esc($batch_token) ?></div>
+                            <input type="hidden" name="batch_token" value="<?= esc($batch_token) ?>">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Serial Number <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="batch_serial" id="batchSerial" placeholder="e.g. SN-2024-001" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Model Number <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="batch_model" id="batchModel" placeholder="e.g. MDL-XYZ" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">OEM / Manufacturer</label>
+                            <select class="form-select" name="batch_manufacturer" id="batchMfg">
+                                <?= $mfg_opts ?>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Purchase Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" name="batch_purchase" id="batchPurchase" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Warranty Expire <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" name="batch_warranty" id="batchWarranty" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Unit Status <span class="text-danger">*</span></label>
+                            <select class="form-select" name="batch_unit_status" id="batchStatus" required>
+                                <option value="Working">Working</option>
+                                <option value="Replacement">Replacement</option>
+                                <option value="Not_working">Not Working</option>
+                                <option value="warranty_claim_process">Warranty Claim Process</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Train <span class="text-muted fw-normal small">(optional)</span></label>
+                            <select class="form-select" name="batch_train" id="batchTrain">
+                                <?= $train_opts ?>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Coach <span class="text-muted fw-normal small">(optional)</span></label>
+                            <select class="form-select" name="batch_coach" id="batchCoach" disabled>
+                                <option value="">No Coach</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Items Table -->
+            <div class="content-card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5><i class="bi bi-table"></i> <?= esc($url_category) ?> Items <span class="badge bg-secondary"><?= count($cat_items) ?></span></h5>
+                    <small class="text-muted">All items will receive the same batch values above</small>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover table-sm mb-0">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Item Name</th>
+                                    <th>Item Code</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            <?php foreach ($cat_items as $idx => $ci): ?>
+                                <tr>
+                                    <td class="text-center"><?= $idx + 1 ?></td>
+                                    <td><strong><?= esc($ci['item_name']) ?></strong></td>
+                                    <td class="text-muted"><?= esc($ci['item_code']) ?></td>
+                                    <input type="hidden" name="rows[<?= $idx ?>][inventory_id]" value="<?= (int)$ci['inventory_id'] ?>">
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="p-3 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary" id="saveBtn">
+                            <i class="bi bi-save"></i> Save All Units
+                        </button>
+                        <button type="reset" class="btn btn-outline-secondary" onclick="resetCoaches()">
+                            <i class="bi bi-arrow-clockwise"></i> Reset
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+        <?php endif; ?>
+    </main>
+</div>
+<?php include 'includes/footer.php'; ?>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+<script src="assets/js/layout.js"></script>
+<script>
+const allCoaches = <?= json_encode(array_map(fn($c) => [
+    'id'       => (string)$c['coach_id'],
+    'label'    => $c['coach_no'] . ($c['coach_type'] ? ' - ' . $c['coach_type'] : ''),
+    'train_id' => $c['train_info_id'] === null ? '' : (string)$c['train_info_id'],
+], $cat_coaches), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
+function buildCoachOptions(trainValue) {
+    let html = '<option value="">No Coach</option>';
+    allCoaches.filter(c => {
+        if (trainValue === 'Detached') return c.train_id === '';
+        return !trainValue || c.train_id === String(trainValue);
+    }).forEach(c => {
+        html += `<option value="${c.id}">${c.label}</option>`;
+    });
+    return html;
+}
+
+// Batch train → batch coach
+const batchTrain = document.getElementById('batchTrain');
+const batchCoach = document.getElementById('batchCoach');
+if (batchTrain && batchCoach) {
+    batchTrain.addEventListener('change', function () {
+        const val = this.value;
+        batchCoach.innerHTML = buildCoachOptions(val);
+        batchCoach.disabled = !val;
+        if (!val) batchCoach.value = '';
+    });
+}
+
+function resetCoaches() {
+    if (batchTrain) batchTrain.value = '';
+    if (batchCoach) {
+        batchCoach.innerHTML = '<option value="">No Coach</option>';
+        batchCoach.disabled = true;
+    }
+}
+
+// Form validation before submit
+document.getElementById('catUnitForm')?.addEventListener('submit', function (e) {
+    const serial   = document.getElementById('batchSerial')?.value.trim();
+    const model    = document.getElementById('batchModel')?.value.trim();
+    const purchase = document.getElementById('batchPurchase')?.value.trim();
+    const warranty = document.getElementById('batchWarranty')?.value.trim();
+    if (!serial || !model || !purchase || !warranty) {
+        e.preventDefault();
+        alert('Serial Number, Model Number, Purchase Date and Warranty Expire are required.');
+    }
+});
+</script>
+</body>
+</html>
+<?php
+    exit;
+}
 
 $use_status_check = $conn->query("SHOW COLUMNS FROM fdds_inventory_unit LIKE 'use_status'");
 if ($use_status_check && $use_status_check->num_rows > 0) {
@@ -435,7 +784,8 @@ while ($row = $result->fetch_assoc()) {
 $stmt->close();
 
 if (!$item) {
-    header('Location: inventory.php');
+    $redirect_url = $url_category !== '' ? 'add-fsds-fdds-inventory.php?category=' . urlencode($url_category) : 'inventory.php';
+    header('Location: ' . $redirect_url);
     exit;
 }
 
@@ -444,7 +794,7 @@ function e($value) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en"> 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">

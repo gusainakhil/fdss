@@ -36,6 +36,9 @@ if ($use_status_check && $use_status_check->num_rows > 0) {
     $unit_has_use_status = true;
 }
 
+$unit_status_check = $conn->query("SHOW COLUMNS FROM fdds_inventory_unit LIKE 'unit_status'");
+$unit_has_unit_status = ($unit_status_check && $unit_status_check->num_rows > 0);
+
 $parameter_column_check = $conn->query("SHOW COLUMNS FROM fdds_inventory_unit LIKE 'inventory_parameter_id'");
 if ($parameter_column_check && $parameter_column_check->num_rows > 0) {
     $unit_has_inventory_parameter_id = true;
@@ -88,6 +91,12 @@ $coach = $coach_result->fetch_assoc();
 
 $stmt->close();
 
+// Determine inventory category from coach_type (FDSS or FSDS)
+$coach_category = strtoupper(trim($coach['coach_type'] ?? ''));
+if (!in_array($coach_category, ['FDSS', 'FSDS'], true)) {
+    $coach_category = ''; // show all if coach_type doesn't match
+}
+
 /*
 |--------------------------------------------------------------------------
 | FETCH MASTER INVENTORY ITEMS
@@ -98,11 +107,18 @@ $master_inventory = [];
 
 $master_query = "SELECT inventory_id, item_code, item_name, category
                  FROM fdss_Inventory_Management
-                 WHERE user_id = ?
-                 ORDER BY item_name ASC";
+                 WHERE user_id = ?";
+if ($coach_category !== '') {
+    $master_query .= " AND UPPER(TRIM(category)) = ?";
+}
+$master_query .= " ORDER BY item_name ASC";
 
 $stmt = $conn->prepare($master_query);
-$stmt->bind_param("i", $user_id);
+if ($coach_category !== '') {
+    $stmt->bind_param("is", $user_id, $coach_category);
+} else {
+    $stmt->bind_param("i", $user_id);
+}
 $stmt->execute();
 
 $master_result = $stmt->get_result();
@@ -119,56 +135,42 @@ $stmt->close();
 |--------------------------------------------------------------------------
 */
 
-$inventory_units = [];
+// Fetch available token batches (only token_id NOT NULL = proper FDSS/FSDS items)
+$token_batches = [];
 
-$unit_query = "SELECT 
-                    iu.unit_id,
-                    iu.inventory_id,
-                    iu.serial_number,
-                    iu.model_number,
-                    iu.purchase_date,
-                    iu.Warranty_expire,
-                    iu.notes,
-                    im.item_name,
-                    m.company_name,
-                    ci.id AS assigned_id,
-                    tc.coach_no AS assigned_coach_no
-               FROM fdds_inventory_unit iu
-               INNER JOIN fdss_Inventory_Management im 
-                    ON im.inventory_id = iu.inventory_id
-               LEFT JOIN fdss_manufacturers m 
-                    ON m.manufacturer_id = iu.manufacturer_id
-               LEFT JOIN fdss_coach_inventory ci 
-                    ON ci.inventory_unit_id = iu.unit_id 
-                    AND ci.user_id = iu.user_id
-               LEFT JOIN fdss_train_coach tc
-                    ON tc.coach_id = ci.coach_id
-               WHERE iu.user_id = ?";
+$token_q = "SELECT
+                iu.token_id,
+                iu.serial_number,
+                iu.model_number,
+                iu.purchase_date,
+                COUNT(iu.unit_id) AS unit_count
+            FROM fdds_inventory_unit iu
+            INNER JOIN fdss_Inventory_Management im
+                ON im.inventory_id = iu.inventory_id
+                AND im.user_id = iu.user_id
+            WHERE iu.user_id = ?
+              AND iu.token_id IS NOT NULL
+              AND iu.token_id != ''";
 
-if ($unit_has_use_status) {
-    $unit_query .= " AND (iu.use_status = 0 OR ci.coach_id = ?)";
-}
+if ($coach_category !== '') $token_q .= " AND UPPER(TRIM(im.category)) = ?";
+if ($unit_has_use_status)   $token_q .= " AND iu.use_status = 0";
+if ($unit_has_unit_status)  $token_q .= " AND iu.unit_status = 'Working'";
 
-$unit_query .= "
-               ORDER BY im.item_name ASC, iu.unit_id DESC";
+$token_q .= " GROUP BY iu.token_id, iu.serial_number, iu.model_number, iu.purchase_date
+              ORDER BY iu.token_id ASC";
 
-$stmt = $conn->prepare($unit_query);
-
-if ($unit_has_use_status) {
-    $stmt->bind_param("ii", $user_id, $coach['coach_id']);
+$t_stmt = $conn->prepare($token_q);
+if ($coach_category !== '') {
+    $t_stmt->bind_param("is", $user_id, $coach_category);
 } else {
-    $stmt->bind_param("i", $user_id);
+    $t_stmt->bind_param("i", $user_id);
 }
-
-$stmt->execute();
-
-$unit_result = $stmt->get_result();
-
-while ($row = $unit_result->fetch_assoc()) {
-    $inventory_units[] = $row;
+$t_stmt->execute();
+$t_res = $t_stmt->get_result();
+while ($row = $t_res->fetch_assoc()) {
+    $token_batches[] = $row;
 }
-
-$stmt->close();
+$t_stmt->close();
 
 /*
 |--------------------------------------------------------------------------
@@ -188,143 +190,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'add_inventory') {
 
-        $inventory_unit_id = (int) ($_POST['inventory_unit_id'] ?? 0);
-        $status = $_POST['status'] ?? 'Active';
+        $batch_token = preg_replace('/[^A-Za-z0-9]/', '', trim($_POST['batch_token'] ?? ''));
+        $status      = $_POST['status'] ?? 'Active';
 
-        if ($inventory_unit_id <= 0) {
-            $message = "Please select an inventory unit.";
+        if ($batch_token === '') {
+            $message = "Please select a batch token.";
             $message_type = "danger";
         } else {
-            $check_query = "SELECT ci.id
-                            FROM fdss_coach_inventory ci
-                            WHERE ci.inventory_unit_id = ?
-                            AND ci.user_id = ?
-                            LIMIT 1";
+            // Find all available units for this token
+            $find_q = "SELECT iu.unit_id
+                        FROM fdds_inventory_unit iu
+                        INNER JOIN fdss_Inventory_Management im
+                            ON im.inventory_id = iu.inventory_id AND im.user_id = iu.user_id
+                        WHERE iu.user_id = ?
+                          AND iu.token_id = ?";
+            if ($coach_category !== '') $find_q .= " AND UPPER(TRIM(im.category)) = ?";
+            if ($unit_has_use_status)   $find_q .= " AND iu.use_status = 0";
+            if ($unit_has_unit_status)  $find_q .= " AND iu.unit_status = 'Working'";
 
-            $check_stmt = $conn->prepare($check_query);
-            $check_stmt->bind_param("ii", $inventory_unit_id, $user_id);
-            $check_stmt->execute();
-            $check_result = $check_stmt->get_result();
+            $find_stmt = $conn->prepare($find_q);
+            if ($coach_category !== '') {
+                $find_stmt->bind_param("iss", $user_id, $batch_token, $coach_category);
+            } else {
+                $find_stmt->bind_param("is", $user_id, $batch_token);
+            }
+            $find_stmt->execute();
+            $find_res = $find_stmt->get_result();
+            $unit_ids = [];
+            while ($r = $find_res->fetch_assoc()) {
+                $unit_ids[] = (int)$r['unit_id'];
+            }
+            $find_stmt->close();
 
-            if ($check_result->num_rows > 0) {
-                $message = "This inventory unit is already assigned to a coach.";
+            if (empty($unit_ids)) {
+                $message = "No available units found for this token. They may already be assigned or not Working.";
                 $message_type = "danger";
             } else {
-                $unit_check_query = "SELECT unit_id FROM fdds_inventory_unit WHERE unit_id = ? AND user_id = ?";
+                $conn->begin_transaction();
+                try {
+                    $ins = $conn->prepare("INSERT INTO fdss_coach_inventory (coach_id, inventory_unit_id, user_id, status) VALUES (?, ?, ?, ?)");
+                    $upd = $unit_has_use_status ? $conn->prepare("UPDATE fdds_inventory_unit SET use_status = 1 WHERE unit_id = ? AND user_id = ?") : null;
 
-                if ($unit_has_use_status) {
-                    $unit_check_query .= " AND use_status = 0";
-                }
+                    $assigned = 0;
+                    foreach ($unit_ids as $uid) {
+                        // Skip if already assigned
+                        $dup = $conn->prepare("SELECT id FROM fdss_coach_inventory WHERE inventory_unit_id = ? AND user_id = ? LIMIT 1");
+                        $dup->bind_param("ii", $uid, $user_id);
+                        $dup->execute();
+                        if ($dup->get_result()->num_rows > 0) { $dup->close(); continue; }
+                        $dup->close();
 
-                $unit_check_stmt = $conn->prepare($unit_check_query);
-                $unit_check_stmt->bind_param("ii", $inventory_unit_id, $user_id);
-                $unit_check_stmt->execute();
-                $unit_check_result = $unit_check_stmt->get_result();
+                        $ins->bind_param("iiis", $coach['coach_id'], $uid, $user_id, $status);
+                        if (!$ins->execute()) throw new Exception("Insert failed: " . $ins->error);
 
-                if ($unit_check_result->num_rows === 0) {
-                    $message = "Selected inventory unit not found.";
-                    $message_type = "danger";
-                } else {
-                    $conn->begin_transaction();
-
-                    try {
-                        $insert_query = "INSERT INTO fdss_coach_inventory
-                            (coach_id, inventory_unit_id, user_id, status)
-                            VALUES (?, ?, ?, ?)";
-
-                        $stmt = $conn->prepare($insert_query);
-                        $stmt->bind_param("iiis", $coach['coach_id'], $inventory_unit_id, $user_id, $status);
-
-                        if (!$stmt->execute()) {
-                            throw new Exception($stmt->error ?: "Error assigning inventory.");
+                        if ($upd) {
+                            $upd->bind_param("ii", $uid, $user_id);
+                            $upd->execute();
                         }
-
-                        $stmt->close();
-
-                        if ($unit_has_use_status) {
-                            $use_update_query = "UPDATE fdds_inventory_unit SET use_status = 1 WHERE unit_id = ? AND user_id = ?";
-                            $use_update_stmt = $conn->prepare($use_update_query);
-                            $use_update_stmt->bind_param("ii", $inventory_unit_id, $user_id);
-                            $use_update_stmt->execute();
-                            $use_update_stmt->close();
-                        }
-
-                        $linked_assigned_count = 0;
-
-                        if ($unit_has_inventory_parameter_id) {
-                            $linked_query = "SELECT iu.unit_id
-                                             FROM fdds_inventory_unit iu
-                                             LEFT JOIN fdss_coach_inventory ci
-                                                ON ci.inventory_unit_id = iu.unit_id
-                                                AND ci.user_id = iu.user_id
-                                             WHERE iu.inventory_parameter_id = ?
-                                             AND iu.user_id = ?
-                                             AND ci.id IS NULL";
-
-                            if ($unit_has_use_status) {
-                                $linked_query .= " AND iu.use_status = 0";
-                            }
-
-                            $linked_stmt = $conn->prepare($linked_query);
-                            $linked_stmt->bind_param("ii", $inventory_unit_id, $user_id);
-                            $linked_stmt->execute();
-                            $linked_result = $linked_stmt->get_result();
-
-                            $linked_unit_ids = [];
-                            while ($linked_row = $linked_result->fetch_assoc()) {
-                                $linked_unit_ids[] = (int) $linked_row['unit_id'];
-                            }
-
-                            $linked_stmt->close();
-
-                            if (!empty($linked_unit_ids)) {
-                                $linked_insert_stmt = $conn->prepare($insert_query);
-
-                                if ($unit_has_use_status) {
-                                    $linked_use_update_stmt = $conn->prepare($use_update_query);
-                                }
-
-                                foreach ($linked_unit_ids as $linked_unit_id) {
-                                    $linked_insert_stmt->bind_param("iiis", $coach['coach_id'], $linked_unit_id, $user_id, $status);
-
-                                    if (!$linked_insert_stmt->execute()) {
-                                        throw new Exception($linked_insert_stmt->error ?: "Error assigning linked parameter inventory.");
-                                    }
-
-                                    if ($unit_has_use_status) {
-                                        $linked_use_update_stmt->bind_param("ii", $linked_unit_id, $user_id);
-                                        $linked_use_update_stmt->execute();
-                                    }
-
-                                    $linked_assigned_count++;
-                                }
-
-                                $linked_insert_stmt->close();
-
-                                if ($unit_has_use_status) {
-                                    $linked_use_update_stmt->close();
-                                }
-                            }
-                        }
-
-                        $conn->commit();
-
-                        $message = "Inventory assigned successfully!";
-                        if ($linked_assigned_count > 0) {
-                            $message .= " {$linked_assigned_count} linked parameter unit(s) assigned automatically.";
-                        }
-                        $message_type = "success";
-                    } catch (Exception $e) {
-                        $conn->rollback();
-                        $message = $e->getMessage();
-                        $message_type = "danger";
+                        $assigned++;
                     }
+                    $ins->close();
+                    if ($upd) $upd->close();
+
+                    $conn->commit();
+                    $message = "$assigned unit(s) from token {$batch_token} assigned to coach successfully.";
+                    $message_type = "success";
+                } catch (Exception $e) {
+                    $conn->rollback();
+                    $message = $e->getMessage();
+                    $message_type = "danger";
                 }
-
-                $unit_check_stmt->close();
             }
-
-            $check_stmt->close();
         }
     }
 
@@ -519,55 +455,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 |--------------------------------------------------------------------------
 */
 
-$inventory_units = [];
-
-$unit_query = "SELECT
-                    iu.unit_id,
-                    iu.inventory_id,
-                    iu.serial_number,
-                    iu.model_number,
-                    iu.purchase_date,
-                    iu.Warranty_expire,
-                    iu.notes,
-                    im.item_name,
-                    m.company_name,
-                    ci.id AS assigned_id,
-                    tc.coach_no AS assigned_coach_no
-               FROM fdds_inventory_unit iu
-               INNER JOIN fdss_Inventory_Management im
-                    ON im.inventory_id = iu.inventory_id
-               LEFT JOIN fdss_manufacturers m
-                    ON m.manufacturer_id = iu.manufacturer_id
-               LEFT JOIN fdss_coach_inventory ci
-                    ON ci.inventory_unit_id = iu.unit_id
-                    AND ci.user_id = iu.user_id
-               LEFT JOIN fdss_train_coach tc
-                    ON tc.coach_id = ci.coach_id
-               WHERE iu.user_id = ?";
-
-if ($unit_has_use_status) {
-    $unit_query .= " AND (iu.use_status = 0 OR ci.coach_id = ?)";
-}
-
-$unit_query .= "
-               ORDER BY im.item_name ASC, iu.unit_id DESC";
-
-$stmt = $conn->prepare($unit_query);
-
-if ($unit_has_use_status) {
-    $stmt->bind_param("ii", $user_id, $coach['coach_id']);
+// Refresh token batches after POST changes
+$token_batches = [];
+$t_stmt2 = $conn->prepare($token_q);
+if ($coach_category !== '') {
+    $t_stmt2->bind_param("is", $user_id, $coach_category);
 } else {
-    $stmt->bind_param("i", $user_id);
+    $t_stmt2->bind_param("i", $user_id);
 }
-
-$stmt->execute();
-$unit_result = $stmt->get_result();
-
-while ($row = $unit_result->fetch_assoc()) {
-    $inventory_units[] = $row;
+$t_stmt2->execute();
+$t_res2 = $t_stmt2->get_result();
+while ($row = $t_res2->fetch_assoc()) {
+    $token_batches[] = $row;
 }
-
-$stmt->close();
+$t_stmt2->close();
 
 /*
 |--------------------------------------------------------------------------
@@ -601,6 +502,9 @@ $list_query = "SELECT
                WHERE ci.coach_id = ?
                AND ci.user_id = ?";
 
+if ($coach_category !== '') {
+    $list_query .= " AND UPPER(TRIM(im.category)) = ?";
+}
 $list_query .= "\n               ORDER BY ci.id DESC";
 
 $stmt = $conn->prepare($list_query);
@@ -609,7 +513,11 @@ if (!$stmt) {
     die("Inventory List SQL Error: " . $conn->error);
 }
 
-$stmt->bind_param("ii", $coach['coach_id'], $user_id);
+if ($coach_category !== '') {
+    $stmt->bind_param("iis", $coach['coach_id'], $user_id, $coach_category);
+} else {
+    $stmt->bind_param("ii", $coach['coach_id'], $user_id);
+}
 
 $stmt->execute();
 
@@ -783,10 +691,13 @@ if ($summary_stmt) {
 
             <h1>
                 Coach Inventory Detail
+                <?php if ($coach_category !== ''): ?>
+                    <span class="badge <?= $coach_category === 'FDSS' ? 'bg-danger' : 'bg-info text-dark' ?> ms-2" style="font-size:0.6em;vertical-align:middle"><?= e($coach_category) ?></span>
+                <?php endif; ?>
             </h1>
 
             <p class="page-header-subtitle">
-                Inventory and expiry status for selected coach
+                <?= $coach_category !== '' ? e($coach_category) . ' inventory' : 'Inventory' ?> for coach <?= e($coach['coach_no']) ?>
             </p>
 
         </div>
@@ -799,7 +710,7 @@ if ($summary_stmt) {
                     data-bs-target="#inventoryModal">
 
                 <i class="bi bi-plus-circle"></i>
-                Add Coach Component
+                Add <?= $coach_category !== '' ? e($coach_category) : 'FDSS/FSDS' ?>
 
             </button>
 
@@ -1049,13 +960,19 @@ if ($summary_stmt) {
 
                                 <td>
 
+                                    <?php
+                                        $info = $item['tool_name'];
+                                        if (!empty($item['serial_number'])) $info .= ' | SN: ' . $item['serial_number'];
+                                        if (!empty($item['model_number']))  $info .= ' | Model: ' . $item['model_number'];
+                                    ?>
                                     <button
                                         class="btn btn-sm btn-outline-primary"
                                         onclick="editInventory(
                                             '<?php echo e($item['coach_inventory_id']); ?>',
                                             '<?php echo e($item['inventory_id']); ?>',
                                             '<?php echo e($item['inventory_unit_id']); ?>',
-                                            '<?php echo e($item['status']); ?>'
+                                            '<?php echo e($item['status']); ?>',
+                                            '<?php echo e(addslashes($info)); ?>'
                                         )"
                                         data-bs-toggle="modal"
                                         data-bs-target="#inventoryModal">
@@ -1275,78 +1192,42 @@ if ($summary_stmt) {
 
                 <div class="modal-body">
 
-	                    <div class="mb-3">
+                    <!-- ADD mode: token batch selector -->
+                    <div id="addTokenField">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">
+                                Select <?= $coach_category !== '' ? e($coach_category) : 'FDSS/FSDS' ?> Batch (Token)
+                                <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select" id="batchTokenSelect" name="batch_token">
+                                <option value="">— Select Token —</option>
+                                <?php foreach ($token_batches as $tb): ?>
+                                    <?php
+                                        $lbl  = 'Token: ' . $tb['token_id'];
+                                        $lbl .= ' | ' . $tb['unit_count'] . ' item(s)';
+                                        $lbl .= $tb['serial_number'] ? ' | SN: ' . $tb['serial_number'] : '';
+                                        $lbl .= $tb['model_number']  ? ' | Model: ' . $tb['model_number'] : '';
+                                        $lbl .= $tb['purchase_date'] ? ' | Purchased: ' . $tb['purchase_date'] : '';
+                                    ?>
+                                    <option value="<?= e($tb['token_id']) ?>"><?= e($lbl) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <?php if (empty($token_batches)): ?>
+                                <div class="form-text text-warning">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                    No available <?= e($coach_category ?: 'FDSS/FSDS') ?> batches (unit_status=Working, use_status=0).
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
 
-	                        <label class="form-label">
-	                            Component
-	                        </label>
-
-	                        <select class="form-select"
-	                                id="inventoryItemId"
-	                                required>
-
-	                            <option value="">
-	                                Select Component
-	                            </option>
-
-	                            <?php foreach ($master_inventory as $tool): ?>
-
-	                                <option value="<?php echo e($tool['inventory_id']); ?>">
-
-	                                    <?php echo e($tool['item_name']); ?>
-	                                    <?php if (!empty($tool['item_code'])): ?>
-	                                        (<?php echo e($tool['item_code']); ?>)
-	                                    <?php endif; ?>
-	                                    <?php if (!empty($tool['category'])): ?>
-	                                        - <?php echo e($tool['category']); ?>
-	                                    <?php endif; ?>
-
-	                                </option>
-
-	                            <?php endforeach; ?>
-
-	                        </select>
-
-	                    </div>
-
-	                    <div class="mb-3">
-
-	                        <label class="form-label">
-	                            Inventory Unit
-	                        </label>
-
-	                        <select class="form-select"
-                                id="inventoryUnitId"
-                                name="inventory_unit_id"
-                                required>
-
-                            <option value="">
-                                Select Inventory Unit
-                            </option>
-
-                            <?php foreach ($inventory_units as $unit): ?>
-
-	                                <option value="<?php echo e($unit['unit_id']); ?>"
-	                                        data-inventory-id="<?php echo e($unit['inventory_id']); ?>"
-	                                        <?php echo (!empty($unit['assigned_id']) && (int) $unit['assigned_id'] !== 0) ? 'data-assigned="1"' : ''; ?>>
-
-                                    <?php echo e($unit['item_name']); ?>
-                                    <?php if (!empty($unit['serial_number'])): ?>
-                                        - SN: <?php echo e($unit['serial_number']); ?>
-                                    <?php endif; ?>
-                                    <?php if (!empty($unit['model_number'])): ?>
-                                        - Model: <?php echo e($unit['model_number']); ?>
-                                    <?php endif; ?>
-                                    <?php if (!empty($unit['assigned_coach_no'])): ?>
-                                        (Assigned: <?php echo e($unit['assigned_coach_no']); ?>)
-                                    <?php endif; ?>
-
-                                </option>
-
-                            <?php endforeach; ?>
-
-                        </select>
-
+                    <!-- EDIT mode: show current assignment info (read-only) -->
+                    <div id="editUnitInfo" style="display:none">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Assignment</label>
+                            <p id="editUnitInfoText" class="form-control-plaintext border rounded px-3 py-2 bg-light small"></p>
+                            <input type="hidden" name="inventory_unit_id" id="editUnitIdHidden">
+                        </div>
                     </div>
 
                     <div class="mb-3">
@@ -1424,80 +1305,41 @@ if ($summary_stmt) {
 <script>
 
 const inventoryModalTitle = document.getElementById('inventoryModalTitle');
-const inventorySubmitBtn = document.getElementById('inventorySubmitBtn');
-const inventoryItemId = document.getElementById('inventoryItemId');
-const inventoryUnitId = document.getElementById('inventoryUnitId');
+const inventorySubmitBtn  = document.getElementById('inventorySubmitBtn');
+const addTokenField       = document.getElementById('addTokenField');
+const editUnitInfo        = document.getElementById('editUnitInfo');
+const editUnitInfoText    = document.getElementById('editUnitInfoText');
+const catLabel            = '<?= $coach_category !== '' ? e($coach_category) : 'FDSS/FSDS' ?>';
 
-function filterInventoryUnits(selectedUnitId = '') {
-
-    const selectedInventoryId = inventoryItemId.value;
-
-    Array.from(inventoryUnitId.options).forEach(function (option) {
-
-        if (option.value === '') {
-            option.hidden = false;
-            return;
-        }
-
-        const belongsToSelectedItem = option.dataset.inventoryId === selectedInventoryId;
-        const isAssigned = option.dataset.assigned === '1';
-        const isCurrentEditUnit = selectedUnitId && option.value === String(selectedUnitId);
-
-        option.hidden = !belongsToSelectedItem || (isAssigned && !isCurrentEditUnit);
-    });
-
-    if (selectedUnitId) {
-        inventoryUnitId.value = selectedUnitId;
-    } else {
-        inventoryUnitId.value = '';
-    }
-}
-	
 function resetInventoryForm() {
-
     document.getElementById('coachInventoryId').value = '';
-
-    inventoryItemId.value = '';
-
-    filterInventoryUnits();
-
-    document.getElementById('inventoryStatus').value = 'Active';
-
-    document.getElementById('formAction').value = 'add_inventory';
-
-    inventoryModalTitle.textContent = 'Add Coach Component';
-
-    inventorySubmitBtn.textContent = 'Save';
+    document.getElementById('editUnitIdHidden').value = '';
+    document.getElementById('batchTokenSelect').value = '';
+    document.getElementById('inventoryStatus').value  = 'Active';
+    document.getElementById('formAction').value       = 'add_inventory';
+    addTokenField.style.display = '';
+    editUnitInfo.style.display  = 'none';
+    document.getElementById('batchTokenSelect').required = true;
+    inventoryModalTitle.textContent = 'Add ' + catLabel + ' Batch';
+    inventorySubmitBtn.textContent  = 'Assign All Units';
 }
 
-function editInventory(
-    id,
-    inventoryId,
-    inventoryUnitId,
-    status
-) {
-
-    document.getElementById('coachInventoryId').value = id;
-
-    document.getElementById('inventoryItemId').value = inventoryId;
-
-    filterInventoryUnits(inventoryUnitId);
-
-    document.getElementById('inventoryStatus').value = status;
-
-    document.getElementById('formAction').value = 'edit_inventory';
-
-    inventoryModalTitle.textContent = 'Edit Coach Inventory';
-
-    inventorySubmitBtn.textContent = 'Update Inventory';
+function editInventory(id, inventoryId, unitId, status, infoText) {
+    document.getElementById('coachInventoryId').value  = id;
+    document.getElementById('editUnitIdHidden').value  = unitId;
+    document.getElementById('inventoryStatus').value   = status;
+    document.getElementById('formAction').value        = 'edit_inventory';
+    editUnitInfoText.textContent                       = infoText || ('Unit ID: ' + unitId);
+    addTokenField.style.display = 'none';
+    editUnitInfo.style.display  = '';
+    document.getElementById('batchTokenSelect').required = false;
+    inventoryModalTitle.textContent = 'Edit Assignment';
+    inventorySubmitBtn.textContent  = 'Update';
 }
 
 function deleteInventory(id) {
-
-    if (confirm('Delete this inventory item?')) {
-
+    if (confirm('Remove this assignment from the coach?')) {
         document.getElementById('deleteInventoryId').value = id;
-
         document.getElementById('deleteForm').submit();
     }
 }
@@ -1505,14 +1347,8 @@ function deleteInventory(id) {
 document.getElementById('addInventoryBtn')
     .addEventListener('click', resetInventoryForm);
 
-inventoryItemId.addEventListener('change', function () {
-    filterInventoryUnits();
-});
-
 document.getElementById('inventoryModal')
     .addEventListener('hidden.bs.modal', resetInventoryForm);
-
-filterInventoryUnits(); 
 
 </script>
 

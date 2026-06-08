@@ -120,7 +120,8 @@ $inventory_query = "SELECT
                         ON im.inventory_id = iu.inventory_id
                      WHERE ci.coach_id = ?
                      AND ci.user_id = ?
-                     AND LOWER(im.item_name) NOT IN ('fdss', 'fsds')
+                     AND ci.status = 'Active'
+                    
                      ORDER BY im.item_name ASC, iu.serial_number ASC";
 
 $inventory_stmt = $conn->prepare($inventory_query);
