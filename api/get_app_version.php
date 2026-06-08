@@ -3,7 +3,7 @@
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
 
-require "../includes/connection.php";
+require_once __DIR__ . '/../config/db.php';
 
 // Create MySQLi connection
 $conn = new mysqli($host, $user, $pass, $dbname);
