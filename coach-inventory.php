@@ -873,7 +873,7 @@ if ($summary_stmt) {
                         <th>Warranty Expire</th>
                         <th>Notes</th>
                         <th>Status</th>
-                        <th>Actions</th>
+                        <!-- <th>Actions</th> -->
 
                     </tr>
 
@@ -950,7 +950,7 @@ if ($summary_stmt) {
 
                                 <td>
 
-                                    <span class="badge <?php echo ($item['status'] === 'Expired') ? 'badge-danger' : 'badge-success'; ?>">
+                                    <span class="badge <?php echo ($item['status'] === 'Inactive') ? 'badge-danger' : 'badge-success'; ?>">
 
                                         <?php echo e($item['status']); ?>
 
@@ -958,7 +958,7 @@ if ($summary_stmt) {
 
                                 </td>
 
-                                <td>
+                                <!-- <td>
 
                                     <?php
                                         $info = $item['tool_name'];
@@ -979,7 +979,7 @@ if ($summary_stmt) {
 
                                         <i class="bi bi-pencil"></i>
 
-                                    </button>
+                                    </button> -->
 <!-- 
                                     <button
                                         class="btn btn-sm btn-outline-danger"
@@ -989,7 +989,7 @@ if ($summary_stmt) {
 
                                     </button> -->
 
-                                </td>
+                                <!-- </td> -->
 
                             </tr>
 
@@ -1244,8 +1244,8 @@ if ($summary_stmt) {
                                 Active
                             </option>
 
-                            <option value="Expired">
-                                Expired
+                            <option value="Inactive">
+                                Inactive
                             </option>
 
                         </select>

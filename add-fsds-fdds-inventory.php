@@ -167,8 +167,18 @@ if ($inventory_id === 0 && $url_category !== '') {
 
     // Fetch coaches
     $cat_coaches = [];
-    $s = $conn->prepare("SELECT coach_id, coach_no, coach_type, train_info_id FROM fdss_train_coach WHERE user_id = ? AND status = 'Active' ORDER BY coach_no");
-    if ($s) { $s->bind_param('i', $user_id); $s->execute(); $res = $s->get_result(); while ($row = $res->fetch_assoc()) { $cat_coaches[] = $row; } $s->close(); }
+    $cat_coach_sql = "SELECT coach_id, coach_no, coach_type, train_info_id FROM fdss_train_coach WHERE user_id = ? AND status = 'Active'"
+        . (!empty($url_category) ? " AND coach_type = ?" : "")
+        . " ORDER BY coach_no";
+    $s = $conn->prepare($cat_coach_sql);
+    if ($s) {
+        if (!empty($url_category)) {
+            $s->bind_param('is', $user_id, $url_category);
+        } else {
+            $s->bind_param('i', $user_id);
+        }
+        $s->execute(); $res = $s->get_result(); while ($row = $res->fetch_assoc()) { $cat_coaches[] = $row; } $s->close();
+    }
 
     function esc($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
@@ -762,10 +772,15 @@ $stmt->close();
 
 $coach_query = "SELECT coach_id, coach_no, coach_type, train_info_id
                 FROM fdss_train_coach
-                WHERE user_id = ? AND status = 'Active'
-                ORDER BY coach_no ASC";
+                WHERE user_id = ? AND status = 'Active'"
+                . (!empty($item_category) ? " AND coach_type = ?" : "")
+                . " ORDER BY coach_no ASC";
 $stmt = $conn->prepare($coach_query);
-$stmt->bind_param('i', $user_id);
+if (!empty($item_category)) {
+    $stmt->bind_param('is', $user_id, $item_category);
+} else {
+    $stmt->bind_param('i', $user_id);
+}
 $stmt->execute();
 $result = $stmt->get_result();
 while ($row = $result->fetch_assoc()) {

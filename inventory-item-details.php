@@ -58,6 +58,12 @@ if ($unit_status_check && $unit_status_check->num_rows > 0) {
     }
 }
 
+$unit_has_token_id = false;
+$token_id_check = $conn->query("SHOW COLUMNS FROM fdds_inventory_unit LIKE 'token_id'");
+if ($token_id_check && $token_id_check->num_rows > 0) {
+    $unit_has_token_id = true;
+}
+
 $unit_has_category = false;
 $category_check = $conn->query("SHOW COLUMNS FROM fdds_inventory_unit LIKE 'category'");
 if ($category_check && $category_check->num_rows > 0) {
@@ -237,7 +243,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $insertStmt->close();
 
             // Update total quantity
-            $getTotalQuery = "SELECT COUNT(*) as total FROM fdds_inventory_unit WHERE inventory_id = ? AND user_id = ?";
+            $getTotalQuery = "SELECT COUNT(*) as total FROM fdds_inventory_unit WHERE inventory_id = ? AND user_id = ?"
+                . ($unit_has_token_id ? " AND (token_id IS NULL OR token_id = '')" : "");
             $getTotalStmt = $conn->prepare($getTotalQuery);
             $getTotalStmt->bind_param('ii', $inventory_id, $user_id);
             $getTotalStmt->execute();
@@ -391,8 +398,9 @@ if ($item) {
                    LEFT JOIN fdss_train_information t
                        ON t.train_info_id = c.train_info_id
                        AND t.user_id = iu.user_id
-                   WHERE iu.inventory_id = ? AND iu.user_id = ?
-                   ORDER BY (ci.coach_id IS NULL) DESC, iu.unit_id ASC";
+                   WHERE iu.inventory_id = ? AND iu.user_id = ?"
+                   . ($unit_has_token_id ? " AND (iu.token_id IS NULL OR iu.token_id = '')" : "")
+                   . " ORDER BY (ci.coach_id IS NULL) DESC, iu.unit_id ASC";
     $unit_stmt = $conn->prepare($unit_query);
     $unit_stmt->bind_param('ii', $inventory_id, $user_id);
     $unit_stmt->execute();
@@ -401,6 +409,7 @@ if ($item) {
         $existing_units[] = $unit_row;
     }
     $unit_stmt->close();
+    $item['quantity'] = count($existing_units);
 }
 
 $train_query = "SELECT train_info_id, train_no, train_name
@@ -418,10 +427,15 @@ $stmt->close();
 
 $coach_query = "SELECT coach_id, coach_no, coach_type, train_info_id
                 FROM fdss_train_coach
-                WHERE user_id = ? AND status = 'Active'
-                ORDER BY coach_no ASC";
+                WHERE user_id = ? AND status = 'Active'"
+                . (!empty($category) ? " AND coach_type = ?" : "")
+                . " ORDER BY coach_no ASC";
 $stmt = $conn->prepare($coach_query);
-$stmt->bind_param('i', $user_id);
+if (!empty($category)) {
+    $stmt->bind_param('is', $user_id, $category);
+} else {
+    $stmt->bind_param('i', $user_id);
+}
 $stmt->execute();
 $result = $stmt->get_result();
 while ($row = $result->fetch_assoc()) {
@@ -691,14 +705,18 @@ function e($value) {
                                             <?php endif; ?>
                                         </td>
                                         <td class="text-center align-middle no-print no-export">
-                                            <button type="button" class="btn btn-sm btn-outline-primary editUnitBtn" 
+                                            <button type="button" class="btn btn-sm <?php echo $is_used ? 'btn-outline-secondary' : 'btn-outline-primary editUnitBtn'; ?>"
+                                                    <?php if (!$is_used): ?>
                                                     data-unit-id="<?php echo e($unit['unit_id']); ?>"
                                                     data-serial="<?php echo e($unit['serial_number']); ?>"
                                                     data-model="<?php echo e($unit['model_number']); ?>"
                                                     data-purchase="<?php echo e($unit['purchase_date']); ?>"
                                                     data-warranty="<?php echo e($unit['warranty_expire']); ?>"
                                                     data-manufacturer="<?php echo e($unit['manufacturer_id']); ?>"
-                                                    data-unit-status="<?php echo e($unit['unit_status'] ?? ''); ?>">
+                                                    data-unit-status="<?php echo e($unit['unit_status'] ?? ''); ?>"
+                                                    <?php else: ?>
+                                                    disabled
+                                                    <?php endif; ?>>
                                                 <i class="bi bi-pencil"></i> Edit
                                             </button>
                                         </td>
