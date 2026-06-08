@@ -1,30 +1,4 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<?php 
+<?php
 session_start();
 require_once 'config/db.php';
 
@@ -101,7 +75,7 @@ $FSDS_oem_makes = get_count($conn, "
 ", "i", $user_id);
 
 $fdss_under_warranty = get_count($conn, "
-    SELECT COUNT(*) AS total 
+    SELECT COUNT(*) AS total
     FROM fdss_coach_inventory ci
     INNER JOIN fdss_train_coach c ON c.coach_id = ci.coach_id
     INNER JOIN fdds_inventory_unit iu ON iu.unit_id = ci.inventory_unit_id
@@ -109,7 +83,7 @@ $fdss_under_warranty = get_count($conn, "
 ", "i", $user_id);
 
 $FSDS_under_warranty = get_count($conn, "
-    SELECT COUNT(*) AS total 
+    SELECT COUNT(*) AS total
     FROM fdss_coach_inventory ci
     INNER JOIN fdss_train_coach c ON c.coach_id = ci.coach_id
     INNER JOIN fdds_inventory_unit iu ON iu.unit_id = ci.inventory_unit_id
@@ -117,7 +91,7 @@ $FSDS_under_warranty = get_count($conn, "
 ", "i", $user_id);
 
 $FSDS_out_warranty = get_count($conn, "
-    SELECT COUNT(*) AS total 
+    SELECT COUNT(*) AS total
     FROM fdss_coach_inventory ci
     INNER JOIN fdss_train_coach c ON c.coach_id = ci.coach_id
     INNER JOIN fdds_inventory_unit iu ON iu.unit_id = ci.inventory_unit_id
@@ -508,22 +482,23 @@ $warranty_claim_fsds = get_count($conn, "
             </div>
         </div>
         </a>
-         <a class="dash-link" href="pages/detached-coaches.php">
-         <div class="dash-box">
+
+        <a class="dash-link" href="pages/detached-coaches.php">
+        <div class="dash-box">
             <div class="dash-icon"><i class="bi bi-arrows-collapse"></i></div>
             <div class="dash-info">
-                <h6> Coach Detached</h6>
+                <h6>Coach Detached</h6>
                 <h3><?php echo number_format($detached_total); ?></h3>
                 <p>FDSS: <?php echo $detached_fdss; ?> | FSDS: <?php echo $detached_fsds; ?></p>
             </div>
         </div>
-         </a>
+        </a>
 
         <a class="dash-link" href="pages/intact-coaches.php">
         <div class="dash-box success">
             <div class="dash-icon"><i class="bi bi-link-45deg"></i></div>
             <div class="dash-info">
-                <h6> Coach Intact</h6>
+                <h6>Coach Intact</h6>
                 <h3><?php echo number_format($intact_total); ?></h3>
                 <p>FDSS: <?php echo $intact_fdss; ?> | FSDS: <?php echo $intact_fsds; ?></p>
             </div>
@@ -536,12 +511,13 @@ $warranty_claim_fsds = get_count($conn, "
             <div class="dash-info">
                 <h6>Total OEM Makes</h6>
                 <h3><?php echo number_format($total_oem_makes); ?></h3>
-                 <p>FDSS: <?php echo number_format($fdss_oem_makes); ?> | FSDS: <?php echo number_format($FSDS_oem_makes); ?></p>
+                <p>FDSS: <?php echo number_format($fdss_oem_makes); ?> | FSDS: <?php echo number_format($FSDS_oem_makes); ?></p>
             </div>
         </div>
         </a>
-          <a class="dash-link" href="pages/components-ok.php">
-          <div class="dash-box success">
+
+        <a class="dash-link" href="pages/components-ok.php">
+        <div class="dash-box success">
             <div class="dash-icon"><i class="bi bi-emoji-smile"></i></div>
             <div class="dash-info">
                 <h6>Components OK</h6>
@@ -549,8 +525,7 @@ $warranty_claim_fsds = get_count($conn, "
                 <p>FDSS: <?php echo $ok_fdss; ?> | FSDS: <?php echo $ok_fsds; ?></p>
             </div>
         </div>
-          </a>
-        
+        </a>
 
         <a class="dash-link" href="pages/components-broken.php">
         <div class="dash-box danger">
@@ -562,8 +537,9 @@ $warranty_claim_fsds = get_count($conn, "
             </div>
         </div>
         </a>
-         <a class="dash-link" href="pages/warranty-claim.php">
-         <div class="dash-box warning">
+
+        <a class="dash-link" href="pages/warranty-claim.php">
+        <div class="dash-box warning">
             <div class="dash-icon"><i class="bi bi-receipt-cutoff"></i></div>
             <div class="dash-info">
                 <h6>Warranty Claim</h6>
@@ -571,18 +547,19 @@ $warranty_claim_fsds = get_count($conn, "
                 <p>FDSS: <?php echo $warranty_claim_fdss; ?> | FSDS: <?php echo $warranty_claim_fsds; ?></p>
             </div>
         </div>
-         </a>
+        </a>
 
         <a class="dash-link" href="pages/under-warranty.php">
         <div class="dash-box success">
             <div class="dash-icon"><i class="bi bi-shield-check"></i></div>
             <div class="dash-info">
-                <h6> Under Warranty</h6>
+                <h6>Under Warranty</h6>
                 <h3><?php echo number_format($total_under_warranty); ?></h3>
-                <p>FDSS: <?php echo number_format($fdss_under_warranty); ?>   | FSDS: <?php echo number_format($FSDS_under_warranty); ?></p>
+                <p>FDSS: <?php echo number_format($fdss_under_warranty); ?> | FSDS: <?php echo number_format($FSDS_under_warranty); ?></p>
             </div>
         </div>
         </a>
+
         <a class="dash-link" href="pages/out-warranty.php">
         <div class="dash-box danger">
             <div class="dash-icon"><i class="bi bi-exclamation-triangle"></i></div>
@@ -594,15 +571,6 @@ $warranty_claim_fsds = get_count($conn, "
         </div>
         </a>
 
-        <!-- <div class="dash-box danger">
-            <div class="dash-icon"><i class="bi bi-x-octagon"></i></div>
-            <div class="dash-info">
-                <h6>Expired Inventory</h6>
-                <h3><?php echo number_format($expired_inventory); ?></h3>
-                <p>Expired items</p>
-            </div>
-        </div> -->
-
         <a class="dash-link" href="pages/components-count-type.php">
         <div class="dash-box success">
             <div class="dash-icon"><i class="bi bi-check-circle"></i></div>
@@ -613,14 +581,6 @@ $warranty_claim_fsds = get_count($conn, "
             </div>
         </div>
         </a>
-
-        
-
-       
-
-      
-
-       
     </div>
 
     <div class="row g-2">

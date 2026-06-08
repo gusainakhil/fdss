@@ -472,7 +472,7 @@ $warranty_claim_fsds = get_count($conn, "
             </div>
         </div>
 
-        <a class="dash-link" href="pages/components-used.php">
+        <a class="dash-link" href="#">
         <div class="dash-box success">
             <div class="dash-icon"><i class="bi bi-boxes"></i></div>
             <div class="dash-info">
@@ -483,7 +483,7 @@ $warranty_claim_fsds = get_count($conn, "
         </div>
         </a>
 
-        <a class="dash-link" href="pages/detached-coaches.php">
+        <a class="dash-link" href="#">
         <div class="dash-box">
             <div class="dash-icon"><i class="bi bi-arrows-collapse"></i></div>
             <div class="dash-info">
@@ -494,7 +494,7 @@ $warranty_claim_fsds = get_count($conn, "
         </div>
         </a>
 
-        <a class="dash-link" href="pages/intact-coaches.php">
+        <a class="dash-link" href="#">
         <div class="dash-box success">
             <div class="dash-icon"><i class="bi bi-link-45deg"></i></div>
             <div class="dash-info">
@@ -505,7 +505,7 @@ $warranty_claim_fsds = get_count($conn, "
         </div>
         </a>
 
-        <a class="dash-link" href="pages/oem-makes.php">
+        <a class="dash-link" href="#">
         <div class="dash-box">
             <div class="dash-icon"><i class="bi bi-building-gear"></i></div>
             <div class="dash-info">
@@ -516,7 +516,7 @@ $warranty_claim_fsds = get_count($conn, "
         </div>
         </a>
 
-        <a class="dash-link" href="pages/components-ok.php">
+        <a class="dash-link" href="#">
         <div class="dash-box success">
             <div class="dash-icon"><i class="bi bi-emoji-smile"></i></div>
             <div class="dash-info">
@@ -527,7 +527,7 @@ $warranty_claim_fsds = get_count($conn, "
         </div>
         </a>
 
-        <a class="dash-link" href="pages/components-broken.php">
+        <a class="dash-link" href="#">
         <div class="dash-box danger">
             <div class="dash-icon"><i class="bi bi-tools"></i></div>
             <div class="dash-info">
@@ -538,7 +538,7 @@ $warranty_claim_fsds = get_count($conn, "
         </div>
         </a>
 
-        <a class="dash-link" href="pages/warranty-claim.php">
+        <a class="dash-link" href="#">
         <div class="dash-box warning">
             <div class="dash-icon"><i class="bi bi-receipt-cutoff"></i></div>
             <div class="dash-info">
@@ -549,7 +549,7 @@ $warranty_claim_fsds = get_count($conn, "
         </div>
         </a>
 
-        <a class="dash-link" href="pages/under-warranty.php">
+        <a class="dash-link" href="#">
         <div class="dash-box success">
             <div class="dash-icon"><i class="bi bi-shield-check"></i></div>
             <div class="dash-info">
@@ -560,7 +560,7 @@ $warranty_claim_fsds = get_count($conn, "
         </div>
         </a>
 
-        <a class="dash-link" href="pages/out-warranty.php">
+        <a class="dash-link" href="#">
         <div class="dash-box danger">
             <div class="dash-icon"><i class="bi bi-exclamation-triangle"></i></div>
             <div class="dash-info">
@@ -571,7 +571,7 @@ $warranty_claim_fsds = get_count($conn, "
         </div>
         </a>
 
-        <a class="dash-link" href="pages/components-count-type.php">
+        <a class="dash-link" href="#">
         <div class="dash-box success">
             <div class="dash-icon"><i class="bi bi-check-circle"></i></div>
             <div class="dash-info">
