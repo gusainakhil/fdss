@@ -251,13 +251,22 @@ $schedule_query = "
       AND s.assignment_date_time IS NOT NULL
       AND DATE(s.assignment_date_time) BETWEEN ? AND ?
       AND UPPER(TRIM(c.coach_type)) = ?
+      AND s.schedule_id = (
+          SELECT MAX(s2.schedule_id)
+          FROM fdss_coach_schedule s2
+          WHERE s2.coach_id = s.coach_id
+            AND s2.user_id = s.user_id
+            AND s2.auditor_id IS NOT NULL
+            AND s2.assignment_date_time IS NOT NULL
+            AND DATE(s2.assignment_date_time) BETWEEN ? AND ?
+      )
     ORDER BY CASE WHEN c.train_info_id IS NULL THEN 1 ELSE 0 END ASC,
-             t.train_no ASC, c.coach_no ASC, s.assignment_date_time ASC, s.schedule_id ASC
+             t.train_no ASC, c.coach_no ASC, s.schedule_id ASC
 ";
 $schedule_stmt = $conn->prepare($schedule_query);
 
 if ($schedule_stmt) {
-    $schedule_stmt->bind_param('isss', $user_id, $month_start, $month_end, $selected_type);
+    $schedule_stmt->bind_param('isssss', $user_id, $month_start, $month_end, $selected_type, $month_start, $month_end);
     $schedule_stmt->execute();
     $schedule_result = $schedule_stmt->get_result();
 
@@ -301,6 +310,13 @@ $detail_query = "
       AND s.assignment_date_time IS NOT NULL
       AND DATE(s.assignment_date_time) BETWEEN ? AND ?
       AND UPPER(TRIM(c.coach_type)) = ?
+      AND i.inspection_id = (
+          SELECT MAX(i2.inspection_id)
+          FROM fdds_coach_inspection i2
+          WHERE i2.schedule_id = i.schedule_id
+            AND i2.inventory_id = i.inventory_id
+            AND i2.user_id = i.user_id
+      )
     ORDER BY s.schedule_id ASC, i.inspection_id ASC
 ";
 $detail_stmt = $conn->prepare($detail_query);

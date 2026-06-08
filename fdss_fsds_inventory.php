@@ -82,6 +82,11 @@ function e($value) {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.0/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="assets/css/styles.css" rel="stylesheet">
     <style>
+        .table-wrapper {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
         .report-table th,
         .report-table td {
             text-align: center;
