@@ -529,6 +529,23 @@ while ($row = $result->fetch_assoc()) {
 
 $stmt->close();
 
+// Most recent inspection date for this coach (used in report links)
+$recent_inspection_date = date('Y-m-d');
+$recent_date_stmt = $conn->prepare("
+    SELECT DATE(created_at) AS insp_date
+    FROM fdds_coach_inspection
+    WHERE coach_id = ? AND user_id = ?
+    ORDER BY created_at DESC
+    LIMIT 1
+");
+if ($recent_date_stmt) {
+    $recent_date_stmt->bind_param('ii', $coach['coach_id'], $user_id);
+    $recent_date_stmt->execute();
+    $recent_date_row = $recent_date_stmt->get_result()->fetch_assoc();
+    if ($recent_date_row) $recent_inspection_date = $recent_date_row['insp_date'];
+    $recent_date_stmt->close();
+}
+
 $schedule_rows = [];
 $schedule_summary = [
     'total' => 0,
@@ -715,7 +732,7 @@ if ($summary_stmt) {
             </button>
 
             <a class="btn btn-secondary"
-               href="reports.php?coach_id=<?php echo e($coach['coach_id']); ?>&date=<?php echo e(date('Y-m-d')); ?>">
+               href="reports.php?coach_id=<?php echo e($coach['coach_id']); ?>&date=<?php echo e($recent_inspection_date); ?>">
 
                 <i class="bi bi-eye"></i>
                 View Reports
@@ -1016,7 +1033,7 @@ if ($summary_stmt) {
                 <h5>Coach Schedule Details</h5>
 
                 <a class="btn btn-outline-primary btn-sm"
-                   href="reports.php?coach_id=<?php echo e($coach['coach_id']); ?>&date=<?php echo e(date('Y-m-d')); ?>">
+                   href="reports.php?coach_id=<?php echo e($coach['coach_id']); ?>&date=<?php echo e($recent_inspection_date); ?>">
                     <i class="bi bi-eye"></i>
                     View Reports
                 </a>
@@ -1130,7 +1147,7 @@ if ($summary_stmt) {
 
                                 <td>
                                     <a class="btn btn-sm btn-outline-secondary"
-                                       href="reports.php?coach_id=<?php echo e($coach['coach_id']); ?>&date=<?php echo e(date('Y-m-d')); ?>">
+                                       href="reports.php?coach_id=<?php echo e($coach['coach_id']); ?>&date=<?php echo e($recent_inspection_date); ?>">
                                         <i class="bi bi-arrow-right-circle"></i>
                                         View Schedule
                                     </a>

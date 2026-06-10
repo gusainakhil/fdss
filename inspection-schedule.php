@@ -1482,7 +1482,11 @@ function openScheduleModal(coachId, trainInfoId, coachNo, nextDueDate) {
     const nextDueDateInput = document.getElementById('nextDueDate');
     const inspectionType = document.getElementById('inspectionType');
 
-    assignmentDateTime.value = nextDueDate + 'T10:00';
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const minDT = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    assignmentDateTime.min = minDT;
+    assignmentDateTime.value = nextDueDate + 'T10:00' < minDT ? minDT : nextDueDate + 'T10:00';
     inspectionType.value = '1_month';
     updateNextInspectionDate();
 }
@@ -1556,7 +1560,14 @@ document.getElementById('roundTripTrain')
     .addEventListener('change', filterRoundTripCoaches);
 
 document.getElementById('roundTripScheduleModal')
-    .addEventListener('shown.bs.modal', filterRoundTripCoaches);
+    .addEventListener('shown.bs.modal', function() {
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const minDT = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        const rtInput = document.querySelector('[name="round_trip_assignment_date_time"]');
+        if (rtInput) { rtInput.min = minDT; if (!rtInput.value || rtInput.value < minDT) rtInput.value = minDT; }
+        filterRoundTripCoaches();
+    });
 
 </script>
 

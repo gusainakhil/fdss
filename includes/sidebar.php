@@ -26,7 +26,7 @@
          <li><a href="<?php echo $base_path; ?>auditors.php"><i class="bi bi-person-badge"></i><span> Auditors</span></a></li>
         <li><a href="<?php echo $base_path; ?>inspection-schedule.php"><i class="bi bi-calendar-check"></i><span>Create Schedule</span></a></li>
         <li><a href="<?php echo $base_path; ?>schedule-list.php"><i class="bi bi-calendar-range"></i><span>View Schedule</span></a></li>
-        <li><a href="<?php echo $base_path; ?>reports.php"><i class="bi bi-sliders"></i><span>Attention Reports</span></a></li>
+        <li><a href="<?php echo $base_path; ?>attenttion-report.php"><i class="bi bi-sliders"></i><span>Attention Reports</span></a></li>
         <li><a href="<?php echo $base_path; ?>full-reports.php"><i class="bi bi-sliders"></i><span>Status of FDSS / FSDS</span></a></li>
         <!-- Reports Dropdown -->
         <!-- <li class="sidebar-dropdown">

@@ -210,9 +210,9 @@ $next_item_code = generate_next_item_code($conn, $item_code_prefix);
                 </p>
             </div>
             <div class="page-header-actions">
-                <!-- <a href="add-parameter.php" class="btn btn-outline-primary">
-                    <i class="bi bi-sliders"></i> Add Parameter
-                </a> -->
+                <a href="All-inventory-unit.php" class="btn btn-primary">
+                    <i class="bi bi-sliders"></i> All Inventory 
+                </a>
                  <a href="add-fsds-fdds-inventory.php?category=FDSS" class="btn btn-primary">
                     <i class="bi bi-plus-circle"></i> Create  FDSS
                 </a>

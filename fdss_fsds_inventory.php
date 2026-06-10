@@ -92,16 +92,17 @@ function e($value) {
             text-align: center;
             vertical-align: middle;
             white-space: nowrap;
-            font-size: 0.82rem;
+            font-size: 0.72rem;
+            padding: 4px 6px !important;
         }
         .token-separator td {
             background: #e8f4fd !important;
             font-weight: 600;
-            font-size: 0.78rem;
+            font-size: 0.7rem;
             color: #0d6efd;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             font-family: monospace;
-            padding: 4px 8px !important;
+            padding: 3px 6px !important;
         }
         .token-cell {
             font-family: monospace;
@@ -193,20 +194,18 @@ function e($value) {
 
             /* Column widths */
             #reportTable col:nth-child(1)  { width: 3%;  }  /* # */
-            #reportTable col:nth-child(2)  { width: 9%;  }  /* Token ID */
-            #reportTable col:nth-child(3)  { width: 4%;  }  /* Type */
-            #reportTable col:nth-child(4)  { width: 6%;  }  /* Item Code */
-            #reportTable col:nth-child(5)  { width: 11%; }  /* Item Name */
-            #reportTable col:nth-child(6)  { width: 7%;  }  /* Serial */
-            #reportTable col:nth-child(7)  { width: 7%;  }  /* Model */
-            #reportTable col:nth-child(8)  { width: 8%;  }  /* OEM */
-            #reportTable col:nth-child(9)  { width: 6%;  }  /* Purchase */
-            #reportTable col:nth-child(10) { width: 6%;  }  /* Warranty */
-            #reportTable col:nth-child(11) { width: 7%;  }  /* Unit Status */
-            #reportTable col:nth-child(12) { width: 10%; }  /* Train */
-            #reportTable col:nth-child(13) { width: 5%;  }  /* Coach No */
-            #reportTable col:nth-child(14) { width: 5%;  }  /* Coach Type */
-            #reportTable col:nth-child(15) { width: 6%;  }  /* Use Status */
+            #reportTable col:nth-child(2)  { width: 5%;  }  /* Type */
+            #reportTable col:nth-child(3)  { width: 7%;  }  /* Item Code */
+            #reportTable col:nth-child(4)  { width: 13%; }  /* Item Name */
+            #reportTable col:nth-child(5)  { width: 9%;  }  /* Serial */
+            #reportTable col:nth-child(6)  { width: 8%;  }  /* Model */
+            #reportTable col:nth-child(7)  { width: 10%; }  /* OEM */
+            #reportTable col:nth-child(8)  { width: 7%;  }  /* Purchase */
+            #reportTable col:nth-child(9)  { width: 7%;  }  /* Warranty */
+            #reportTable col:nth-child(10) { width: 9%;  }  /* Unit Status */
+            #reportTable col:nth-child(11) { width: 13%; }  /* Train */
+            #reportTable col:nth-child(12) { width: 7%;  }  /* Coach No */
+            #reportTable col:nth-child(13) { width: 7%;  }  /* Use Status */
 
             tr { page-break-inside: avoid; break-inside: avoid; }
             .token-separator { page-break-before: auto; }
@@ -278,12 +277,11 @@ function e($value) {
                         <colgroup>
                             <col><col><col><col><col>
                             <col><col><col><col><col>
-                            <col><col><col><col><col>
+                            <col><col><col>
                         </colgroup>
                         <thead class="table-dark">
                             <tr>
                                 <th>#</th>
-                                <th>Token ID</th>
                                 <th>Type</th>
                                 <th>Item Code</th>
                                 <th>Item Name</th>
@@ -295,19 +293,19 @@ function e($value) {
                                 <th>Unit Status</th>
                                 <th>Train</th>
                                 <th>Coach No.</th>
-                                <th>Coach Type</th>
                                 <th>Use Status</th>
                             </tr>
                         </thead>
                         <tbody>
                         <?php if (empty($items)): ?>
                             <tr>
-                                <td colspan="15" class="text-center text-muted py-4">
+                                <td colspan="13" class="text-center text-muted py-4">
                                     <i class="bi bi-inbox fs-4 d-block mb-2"></i>
                                     No <?= e($selected_type) ?> units found. Use <a href="add-fsds-fdds-inventory.php?category=<?= e($selected_type) ?>">Add Units</a> to create entries.
                                 </td>
                             </tr>
                         <?php else: ?>
+
                             <?php
                             $prev_token = null;
                             $token_row_num = 0;
@@ -319,7 +317,7 @@ function e($value) {
                                     $token_row_num++;
                             ?>
                             <tr class="token-separator">
-                                <td colspan="15">
+                                <td colspan="13">
                                     <i class="bi bi-tag-fill me-1"></i>
                                     <?= $selected_type === 'FDSS' ? 'FDSS' : 'FSDS' ?> <?= $token_row_num ?>: Token <?= e($item['token_id']) ?>
                                     &nbsp;&middot;&nbsp;
@@ -331,7 +329,6 @@ function e($value) {
                             <?php endif; $global_idx++; ?>
                             <tr>
                                 <td><?= $global_idx ?></td>
-                                <td class="token-cell"><?= e($item['token_id']) ?></td>
                                 <td>
                                     <span class="badge <?= $item['category'] === 'FDSS' ? 'bg-danger' : 'bg-info text-dark' ?>">
                                         <?= e($item['category']) ?>
@@ -377,7 +374,6 @@ function e($value) {
                                         : '<span class="text-muted">—</span>' ?>
                                 </td>
                                 <td><?= e($item['coach_no'] ?: '—') ?></td>
-                                <td><?= e($item['coach_type'] ?: '—') ?></td>
                                 <td>
                                     <?php $in_use = (int)($item['use_status'] ?? 0) === 1; ?>
                                     <span class="badge <?= $in_use ? 'bg-secondary' : 'bg-success' ?>">
