@@ -97,7 +97,7 @@ $query = "
         ON mfr.manufacturer_id = iu.manufacturer_id
     WHERE ci.user_id = ?
       AND DATE(ci.created_at) BETWEEN ? AND ?
-    ORDER BY ci.created_at ASC , ci.inspection_id ASC
+    ORDER BY ci.created_at DESC , ci.inspection_id ASC
 ";
 
 $stmt = $conn->prepare($query);

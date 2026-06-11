@@ -211,7 +211,7 @@ $next_item_code = generate_next_item_code($conn, $item_code_prefix);
             </div>
             <div class="page-header-actions">
                 <a href="All-inventory-unit.php" class="btn btn-primary">
-                    <i class="bi bi-sliders"></i> All Inventory 
+                    <i class="bi bi-sliders"></i> Inventory Report
                 </a>
                  <a href="add-fsds-fdds-inventory.php?category=FDSS" class="btn btn-primary">
                     <i class="bi bi-plus-circle"></i> Create  FDSS
@@ -221,7 +221,7 @@ $next_item_code = generate_next_item_code($conn, $item_code_prefix);
                 </a>
                 
                 <button class="btn btn-primary" id="addInventoryBtn" data-bs-toggle="modal" data-bs-target="#inventoryModal">
-                    <i class="bi bi-plus-circle"></i> Add Inventory
+                    <i class="bi bi-plus-circle"></i> Add Items
                 </button>
             </div>
         </div>
@@ -247,8 +247,9 @@ $next_item_code = generate_next_item_code($conn, $item_code_prefix);
                         <thead>
                             <tr>
                                 <th>Item Code</th>
-                                <th>Inventory Name</th>
-                                <th>Category</th>
+                                 <th>Category</th>
+                                <th>Inventory Type</th>
+                               
                                 <th>Last Updated</th>
                                 <th>Actions</th>
                             </tr>
@@ -269,12 +270,13 @@ $next_item_code = generate_next_item_code($conn, $item_code_prefix);
                                             <?php echo htmlspecialchars($item['item_code']); ?>
                                         </a>
                                     </td>
-                                    <td><?php echo htmlspecialchars($item['item_name']); ?></td>
                                     <td>
                                         <span class="badge <?php echo in_array($item['category'], ['Primary', 'FDSS'], true) ? 'badge-success' : 'badge-info'; ?>">
                                             <?php echo htmlspecialchars($item['category']); ?>
                                         </span>
                                     </td>
+                                    <td><?php echo htmlspecialchars($item['item_name']); ?></td>
+                                    
                                     <td>
                                         <?php echo $item['last_updated'] ? date('Y-m-d h:i A', strtotime($item['last_updated'])) : '-'; ?>
                                     </td>

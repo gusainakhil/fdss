@@ -19,7 +19,7 @@
        
         <li><a href="<?php echo $base_path; ?>trains.php"><i class="bi bi-train-freight-front"></i><span> Trains</span></a></li>
          <!-- <li><a href="<?php echo $base_path; ?>add-parameter.php"><i class="bi bi-gear"></i><span>Add FDSS/FSDS Parameters</span></a></li> -->
-        <li><a href="<?php echo $base_path; ?>inventory.php"><i class="bi bi-boxes"></i><span> Add Inventory</span></a></li>
+        <li><a href="<?php echo $base_path; ?>inventory.php"><i class="bi bi-boxes"></i><span> Inventory</span></a></li>
         <li><a href="<?php echo $base_path; ?>fdss_fsds_inventory.php"><i class="bi bi-clipboard-plus"></i><span>FDSS/FSDS</span></a></li>
 
 
