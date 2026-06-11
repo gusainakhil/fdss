@@ -306,7 +306,7 @@ function filter_url($overrides = []) {
         <!-- PAGE HEADER -->
         <div class="page-header no-print">
             <div>
-                <h1>All Inventory Units</h1>
+                <h1>All Inventory Units Report </h1>
                 <p class="page-header-subtitle">
                     <a href="index.php" class="text-primary text-decoration-none">Dashboard</a>
                     <span class="text-muted"> / </span>Complete Inventory Report
@@ -514,7 +514,7 @@ function filter_url($overrides = []) {
                                     <?php if ($section === 'fdss_fsds'): ?>
                                         <i class="bi bi-tag-fill me-1 text-danger"></i> FDSS / FSDS Attached Inventory
                                     <?php else: ?>
-                                        <i class="bi bi-plus-circle-fill me-1 text-success"></i> Additional / Standalone Inventory
+                                        <i class="bi bi-plus-circle-fill me-1 text-success"></i> Additional / Temporary Inventory
                                     <?php endif; ?>
                                 </td>
                             </tr>
