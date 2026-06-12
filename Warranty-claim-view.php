@@ -26,39 +26,96 @@ if ($col_check && $col_check->num_rows > 0) {
     }
 }
 
-// Handle status update POST
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'complete_claim') {
+// Handle complete with new inventory unit
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'complete_with_new_unit') {
     $post_claim_id       = (int) ($_POST['claim_id'] ?? 0);
     $claim_complete_date = trim($_POST['claim_complete_date'] ?? '');
     $complete_remark     = trim($_POST['complete_remark'] ?? '');
+    $old_unit_id         = (int) ($_POST['old_unit_id'] ?? 0);
+    $inv_id              = (int) ($_POST['inventory_id'] ?? 0);
+    $inv_param_id        = (int) ($_POST['inventory_parameter_id'] ?? 0);
+    $mfr_id              = (int) ($_POST['manufacturer_id'] ?? 0);
+    $category            = trim($_POST['category'] ?? '');
+    $token_id            = trim($_POST['token_id'] ?? '');
+    $new_serial          = trim($_POST['new_serial_number'] ?? '');
+    $new_model           = trim($_POST['new_model_number'] ?? '');
+    $new_purchase        = trim($_POST['new_purchase_date'] ?? '');
+    $new_warranty        = trim($_POST['new_warranty_expire'] ?? '');
+    $new_notes           = trim($_POST['new_notes'] ?? '');
 
-    if ($post_claim_id <= 0) {
-        $message      = 'Invalid claim ID.';
+    if ($post_claim_id <= 0 || $inv_id <= 0 || $new_serial === '' || $new_model === '') {
+        $message      = 'Serial number and model number are required.';
         $message_type = 'danger';
     } else {
-        $upd = $conn->prepare("
-            UPDATE fdss_warranty_claim
-            SET status = 'complete',
-                claim_complete_date = ?,
-                complete_remark = ?
-            WHERE warranty_claim_id = ?
-              AND COALESCE(
-                  (SELECT user_id FROM fdss_coach_schedule WHERE schedule_id = fdss_warranty_claim.schedule_id LIMIT 1),
-                  (SELECT user_id FROM fdds_inventory_unit WHERE unit_id = fdss_warranty_claim.unit_id LIMIT 1)
-              ) = ?
-        ");
-        if ($upd) {
-            $date_val    = $claim_complete_date !== '' ? $claim_complete_date : null;
-            $remark_val  = $complete_remark !== '' ? $complete_remark : null;
+        $conn->begin_transaction();
+        try {
+            $inv_param_val  = $inv_param_id > 0 ? $inv_param_id : null;
+            $mfr_val        = $mfr_id > 0 ? $mfr_id : null;
+            $purchase_val   = $new_purchase !== '' ? $new_purchase : null;
+            $warranty_val   = $new_warranty !== '' ? $new_warranty : null;
+            $notes_val      = $new_notes !== '' ? $new_notes : null;
+            $category_val   = $category !== '' ? $category : null;
+
+            $esc_serial   = $conn->real_escape_string($new_serial);
+            $esc_model    = $conn->real_escape_string($new_model);
+            $sql_param_id = $inv_param_id > 0  ? (int) $inv_param_id : 'NULL';
+            $sql_mfr_id   = $mfr_id > 0        ? (int) $mfr_id       : 'NULL';
+            $sql_purchase = $purchase_val !== null ? "'" . $conn->real_escape_string($purchase_val) . "'" : 'NULL';
+            $sql_warranty = $warranty_val !== null ? "'" . $conn->real_escape_string($warranty_val) . "'" : 'NULL';
+            $sql_notes    = $notes_val    !== null ? "'" . $conn->real_escape_string($notes_val)    . "'" : 'NULL';
+            $sql_category = $category_val !== null ? "'" . $conn->real_escape_string($category_val) . "'" : 'NULL';
+            $sql_token    = $token_id !== '' ? "'" . $conn->real_escape_string($token_id) . "'" : 'NULL';
+
+            $insert_sql = "INSERT INTO fdds_inventory_unit
+                (inventory_id, inventory_parameter_id, user_id, serial_number, model_number,
+                 purchase_date, Warranty_expire, manufacturer_id, notes, Category,
+                 Token_id, unit_status, use_status)
+            VALUES ({$inv_id}, {$sql_param_id}, {$user_id}, '{$esc_serial}', '{$esc_model}',
+                 {$sql_purchase}, {$sql_warranty}, {$sql_mfr_id}, {$sql_notes}, {$sql_category},
+                 {$sql_token}, 'Working', 0)";
+
+            if (!$conn->query($insert_sql)) {
+                throw new Exception("Insert failed: {$conn->error}");
+            }
+
+            if ($old_unit_id > 0) {
+                $upd_unit = $conn->prepare("UPDATE fdds_inventory_unit SET unit_status='Not_working' WHERE unit_id = ? AND user_id = ?");
+                if ($upd_unit) {
+                    $upd_unit->bind_param('ii', $old_unit_id, $user_id);
+                    $upd_unit->execute();
+                    $upd_unit->close();
+                }
+            }
+
+            $date_val   = $claim_complete_date !== '' ? $claim_complete_date : null;
+            $remark_val = $complete_remark !== '' ? $complete_remark : null;
+            $upd = $conn->prepare("
+                UPDATE fdss_warranty_claim
+                SET status = 'complete',
+                    claim_complete_date = ?,
+                    complete_remark = ?
+                WHERE warranty_claim_id = ?
+                  AND COALESCE(
+                      (SELECT user_id FROM fdss_coach_schedule WHERE schedule_id = fdss_warranty_claim.schedule_id LIMIT 1),
+                      (SELECT user_id FROM fdds_inventory_unit WHERE unit_id = fdss_warranty_claim.unit_id LIMIT 1)
+                  ) = ?
+            ");
+            if (!$upd) {
+                throw new Exception("Update prepare failed: {$conn->error}");
+            }
             $upd->bind_param('ssii', $date_val, $remark_val, $post_claim_id, $user_id);
-            if ($upd->execute() && $upd->affected_rows > 0) {
-                $message      = 'Claim marked as complete.';
-                $message_type = 'success';
-            } else {
-                $message      = 'Could not update claim.';
-                $message_type = 'danger';
+            if (!$upd->execute()) {
+                throw new Exception("Update execute failed: {$upd->error}");
             }
             $upd->close();
+
+            $conn->commit();
+            $message      = 'New inventory unit added and claim marked as complete.';
+            $message_type = 'success';
+        } catch (Exception $e) {
+            $conn->rollback();
+            $message      = 'Error: ' . $e->getMessage();
+            $message_type = 'danger';
         }
     }
 }
@@ -117,6 +174,12 @@ if ($claim_table_exists && $claim_id > 0) {
             iu.model_number,
             iu.purchase_date,
             iu.Warranty_expire,
+            iu.inventory_id AS iu_inventory_id,
+            iu.manufacturer_id AS iu_mfr_id,
+            iu.inventory_parameter_id AS iu_param_id,
+            iu.Category AS unit_category,
+            iu.notes AS unit_notes,
+            iu.Token_id AS unit_token_id,
             im.item_code,
             im.item_name,
             im.category,
@@ -467,34 +530,135 @@ $make_serial = display_value(trim((string) ($claim['manufacturer_name'] ?? '')) 
 
 <?php if ($claim && $claim['claim_status'] !== 'complete'): ?>
 <div class="modal fade" id="completeModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-check-circle text-success me-2"></i>Mark Claim as Complete</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="bi bi-box-seam me-2"></i>Add Replacement Inventory &amp; Complete Claim</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <form method="POST" action="Warranty-claim-view.php?claim_id=<?php echo e($claim_id); ?>">
-                <input type="hidden" name="action" value="complete_claim">
-                <input type="hidden" name="claim_id" value="<?php echo e($claim_id); ?>">
+                <input type="hidden" name="action"                  value="complete_with_new_unit">
+                <input type="hidden" name="claim_id"                value="<?php echo e($claim_id); ?>">
+                <input type="hidden" name="old_unit_id"             value="<?php echo e($claim['unit_id']); ?>">
+                <input type="hidden" name="inventory_id"            value="<?php echo e($claim['iu_inventory_id']); ?>">
+                <input type="hidden" name="inventory_parameter_id"  value="<?php echo e($claim['iu_param_id']); ?>">
+                <input type="hidden" name="manufacturer_id"         value="<?php echo e($claim['iu_mfr_id']); ?>">
+                <input type="hidden" name="category"                value="<?php echo e($claim['unit_category']); ?>">
+                <input type="hidden" name="token_id"               value="<?php echo e($claim['unit_token_id'] ?? ''); ?>">
+
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Claim Complete Date</label>
-                        <input type="date" class="form-control" name="claim_complete_date"
-                               value="<?php echo date('Y-m-d'); ?>" required>
+
+                    <!-- Claim date + remark -->
+                    <div class="row g-3 mb-4 pb-3 border-bottom">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Claim Complete Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" name="claim_complete_date"
+                                   value="<?php echo date('Y-m-d'); ?>" required>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label fw-semibold">Remark</label>
+                            <textarea class="form-control" name="complete_remark" rows="2"
+                                      placeholder="Enter any remark..."></textarea>
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Remark</label>
-                        <textarea class="form-control" name="complete_remark" rows="3"
-                                  placeholder="Enter any remark..."></textarea>
+
+                    <!-- Two columns -->
+                    <div class="row g-3">
+
+                        <!-- LEFT: Old inventory -->
+                        <div class="col-md-6">
+                            <div class="card border-secondary h-100">
+                                <div class="card-header bg-secondary text-white fw-semibold">
+                                    <i class="bi bi-archive me-1"></i> Old Inventory (Current)
+                                </div>
+                                <div class="card-body p-3">
+                                    <table class="table table-sm table-bordered mb-0" style="font-size:0.88rem">
+                                        <tbody>
+                                            <tr>
+                                                <th class="text-muted" style="width:42%">Item</th>
+                                                <td><?php echo e(display_value($claim['item_name'])); ?></td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Serial No.</th>
+                                                <td><?php echo e(display_value($claim['serial_number'])); ?></td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Model No.</th>
+                                                <td><?php echo e(display_value($claim['model_number'])); ?></td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Purchase Date</th>
+                                                <td><?php echo e(format_form_date($claim['purchase_date'])); ?></td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Warranty Expire</th>
+                                                <td><?php echo e(format_form_date($claim['Warranty_expire'])); ?></td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Manufacturer</th>
+                                                <td><?php echo e(display_value($claim['manufacturer_name'])); ?></td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Category</th>
+                                                <td><?php echo e(display_value($claim['unit_category'])); ?></td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Notes</th>
+                                                <td><?php echo e(display_value($claim['unit_notes'])); ?></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <p class="text-muted mt-2 mb-0" style="font-size:0.78rem">
+                                        <i class="bi bi-info-circle"></i>
+                                        This unit will be marked as <strong>Replacement</strong> on submit.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- RIGHT: New inventory form -->
+                        <div class="col-md-6">
+                            <div class="card border-success h-100">
+                                <div class="card-header bg-success text-white fw-semibold">
+                                    <i class="bi bi-plus-circle me-1"></i> New Replacement Inventory
+                                </div>
+                                <div class="card-body p-3">
+                                    <div class="mb-3">
+                                        <label class="form-label fw-semibold">Serial Number <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" name="new_serial_number"
+                                               placeholder="Enter new serial number" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label fw-semibold">Model Number <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" name="new_model_number"
+                                               placeholder="Enter new model number" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label fw-semibold">Purchase Date</label>
+                                        <input type="date" class="form-control bg-light" name="new_purchase_date"
+                                               value="<?php echo e($claim['purchase_date'] ?? ''); ?>" readonly>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label fw-semibold">Warranty Expiry</label>
+                                        <input type="date" class="form-control bg-light" name="new_warranty_expire"
+                                               value="<?php echo $claim['Warranty_expire'] ? date('Y-m-d', strtotime($claim['Warranty_expire'])) : ''; ?>" readonly>
+                                    </div>
+                                    <div class="mb-0">
+                                        <label class="form-label fw-semibold">Notes</label>
+                                        <textarea class="form-control" name="new_notes" rows="2"
+                                                  placeholder="Optional notes..."><?php echo e($claim['unit_notes'] ?? ''); ?></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
-                    <p class="text-muted mb-0 small">
-                        This will update the status from <strong>claim process</strong> to <strong>complete</strong>.
-                    </p>
                 </div>
+
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-success">
-                        <i class="bi bi-check-circle"></i> Confirm Complete
+                        <i class="bi bi-check-circle"></i> Add Inventory &amp; Complete Claim
                     </button>
                 </div>
             </form>
