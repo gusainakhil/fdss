@@ -56,7 +56,7 @@ if (!in_array($disposition, ['inventory', 'scrap'], true)) {
 $old_ci_result = $conn->query("
     SELECT id, inventory_unit_id
     FROM fdss_coach_inventory
-    WHERE inventory_unit_id = {$old_coach_inventory_id}
+    WHERE id = {$old_coach_inventory_id}
     LIMIT 1
 ");
 if (!$old_ci_result) {
@@ -91,7 +91,7 @@ $conn->begin_transaction();
 try {
 
     // STEP 1a: Delete old coach_inventory record
-    if (!$conn->query("DELETE FROM fdss_coach_inventory WHERE inventory_unit_id = {$old_coach_inventory_id}")) {
+    if (!$conn->query("DELETE FROM fdss_coach_inventory WHERE id = {$old_coach_inventory_id}")) {
         throw new Exception("Step 1a failed: {$conn->error}");
     }
 
@@ -119,6 +119,25 @@ try {
     // STEP 2b: Mark new unit as in-use
     if (!$conn->query("UPDATE fdds_inventory_unit SET use_status = 1 WHERE unit_id = {$new_unit_id}")) {
         throw new Exception("Step 2b failed: {$conn->error}");
+    }
+
+    // STEP 2c: Copy token_id from any active unit of this coach to the new unit
+    $token_result = $conn->query("
+        SELECT iu.token_id
+        FROM fdss_coach_inventory ci
+        INNER JOIN fdds_inventory_unit iu ON iu.unit_id = ci.inventory_unit_id
+        WHERE ci.coach_id = {$coach_id}
+          AND ci.status = 'Active'
+          AND ci.inventory_unit_id != {$new_unit_id}
+          AND iu.token_id IS NOT NULL
+          AND iu.token_id != ''
+        LIMIT 1
+    ");
+    if ($token_result && $token_row = $token_result->fetch_assoc()) {
+        $esc_token = $conn->real_escape_string($token_row['token_id']);
+        if (!$conn->query("UPDATE fdds_inventory_unit SET token_id = '{$esc_token}' WHERE unit_id = {$new_unit_id}")) {
+            throw new Exception("Step 2c failed: {$conn->error}");
+        }
     }
 
     // STEP 3: Auto-create inspection for new unit

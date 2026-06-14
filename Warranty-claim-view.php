@@ -35,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $inv_id              = (int) ($_POST['inventory_id'] ?? 0);
     $inv_param_id        = (int) ($_POST['inventory_parameter_id'] ?? 0);
     $mfr_id              = (int) ($_POST['manufacturer_id'] ?? 0);
+    $post_coach_id       = (int) ($_POST['coach_id'] ?? 0);
     $category            = trim($_POST['category'] ?? '');
     $token_id            = trim($_POST['token_id'] ?? '');
     $new_serial          = trim($_POST['new_serial_number'] ?? '');
@@ -66,13 +67,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $sql_category = $category_val !== null ? "'" . $conn->real_escape_string($category_val) . "'" : 'NULL';
             $sql_token    = $token_id !== '' ? "'" . $conn->real_escape_string($token_id) . "'" : 'NULL';
 
+            $sql_coach_id = $post_coach_id > 0 ? $post_coach_id : 'NULL';
+
             $insert_sql = "INSERT INTO fdds_inventory_unit
                 (inventory_id, inventory_parameter_id, user_id, serial_number, model_number,
                  purchase_date, Warranty_expire, manufacturer_id, notes, Category,
-                 Token_id, unit_status, use_status)
+                 Token_id, unit_status, use_status, Coach_id)
             VALUES ({$inv_id}, {$sql_param_id}, {$user_id}, '{$esc_serial}', '{$esc_model}',
                  {$sql_purchase}, {$sql_warranty}, {$sql_mfr_id}, {$sql_notes}, {$sql_category},
-                 {$sql_token}, 'Working', 0)";
+                 {$sql_token}, 'Working', 0, {$sql_coach_id})";
 
             if (!$conn->query($insert_sql)) {
                 throw new Exception("Insert failed: {$conn->error}");
@@ -167,6 +170,7 @@ if ($claim_table_exists && $claim_id > 0) {
             s.special_remarks,
             t.train_no,
             t.train_name,
+            c.coach_id AS coach_id,
             c.coach_no,
             c.coach_type,
             c.`Type` AS coach_body_type,
@@ -543,8 +547,9 @@ $make_serial = display_value(trim((string) ($claim['manufacturer_name'] ?? '')) 
                 <input type="hidden" name="inventory_id"            value="<?php echo e($claim['iu_inventory_id']); ?>">
                 <input type="hidden" name="inventory_parameter_id"  value="<?php echo e($claim['iu_param_id']); ?>">
                 <input type="hidden" name="manufacturer_id"         value="<?php echo e($claim['iu_mfr_id']); ?>">
+                <input type="hidden" name="coach_id"                value="<?php echo e($claim['coach_id'] ?? ''); ?>">
                 <input type="hidden" name="category"                value="<?php echo e($claim['unit_category']); ?>">
-                <input type="hidden" name="token_id"               value="<?php echo e($claim['unit_token_id'] ?? ''); ?>">
+                <input type="hidden" name="token_id"                value="<?php echo e($claim['unit_token_id'] ?? ''); ?>">
 
                 <div class="modal-body">
 
