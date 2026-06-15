@@ -174,10 +174,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <a href="#" class="contact-support">Contact Support</a>
                     </div>
 
-                    <div class="alert-info">
+                    <!-- <div class="alert-info">
                         <i class="bi bi-info-circle-fill"></i>
                         <span>Demo: beatle/123456 or admin/123456 or kings/123456</span>
-                    </div>
+                    </div> -->
                 </div>
             </div>
         </div>
