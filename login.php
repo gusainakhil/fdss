@@ -168,11 +168,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </button>
                     </form>
 
-                    <div class="login-footer">
+                    <!-- <div class="login-footer">
                         <a href="#" class="forgot-password">Forgot Password?</a>
                         <span class="separator">•</span>
                         <a href="#" class="contact-support">Contact Support</a>
-                    </div>
+                    </div> -->
 
                     <!-- <div class="alert-info">
                         <i class="bi bi-info-circle-fill"></i>
