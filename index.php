@@ -120,6 +120,7 @@ $active_inventory = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_coach_i
 $pending_schedules = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_coach_schedule WHERE user_id = ? AND status = 'Pending'", "i", $user_id);
 $assigned_schedules = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_coach_schedule WHERE user_id = ? AND status = 'Assigned'", "i", $user_id);
 $completed_schedules = get_count($conn, "SELECT COUNT(*) AS total FROM fdss_coach_schedule WHERE user_id = ? AND status = 'Completed'", "i", $user_id);
+$total_schedules = $assigned_schedules + $completed_schedules + $pending_schedules;
 
 $subscription_days = 0;
 $sub_end_date_str = '';
@@ -583,6 +584,17 @@ $warranty_claim_fsds = get_count($conn, "
             </div>
         </div>
         </a>
+
+        <a class="dash-link" href="#">
+        <div class="dash-box warning">
+            <div class="dash-icon"><i class="bi bi-calendar-check"></i></div>
+            <div class="dash-info">
+                <h6>Total Schedules</h6>
+                <h3><?php echo number_format($total_schedules); ?></h3>
+                <p>Assigned: <?php echo number_format($assigned_schedules); ?> | Completed: <?php echo number_format($completed_schedules); ?></p>
+            </div>
+        </div>
+        </a>
     </div>
 
     <div class="row g-2">
@@ -750,7 +762,15 @@ new Chart(document.getElementById('inventoryUsageChart'), {
         maintainAspectRatio: false,
         indexAxis: 'y',
         plugins: { legend: { position: 'bottom' } },
-        scales: { x: { beginAtZero: true } }
+        scales: {
+            x: {
+                beginAtZero: true,
+                ticks: {
+                    precision: 0,
+                    stepSize: 1
+                }
+            }
+        }
     }
 });
 
