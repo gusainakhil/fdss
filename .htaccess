@@ -1,0 +1,9 @@
+DirectoryIndex index.php index.html
+
+RewriteEngine On
+
+# Never expose the hosting filesystem path in public URLs.
+RewriteRule ^home/fdssbeatleanalyt/public_html/website/?$ /website/ [R=302,L,NC]
+RewriteRule ^$ website/ [R=302,L]
+RewriteRule ^website/login\.html$ website/login.php [R=302,NC,L]
+RewriteRule ^website/contact\.html$ website/contact.php [R=302,NC,L]

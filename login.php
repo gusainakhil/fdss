@@ -1,55 +1,8 @@
 <?php
 session_start();
-require_once 'config/db.php';
+require_once __DIR__ . '/includes/login_auth.php';
 
-$login_error = '';
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = $conn->real_escape_string($_POST['username']);
-    $password = $_POST['password'];
-    
-    // Query the database for user
-    $query = "SELECT user_id, username, password_hash, role, status FROM fdss_users WHERE username = ?";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("s", $username);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    
-    if ($result->num_rows === 1) {
-        $user = $result->fetch_assoc();
-        
-        // Verify password using bcrypt
-        if (password_verify($password, $user['password_hash'])) {
-            // Check if user is active
-            if ($user['status'] === 'Active') {
-                // Create session
-                $_SESSION['user_id'] = $user['user_id'];
-                $_SESSION['username'] = $user['username'];
-                $_SESSION['role'] = $user['role'];
-                $_SESSION['login_time'] = time();
-                
-                // Role-based redirection
-                if ($user['role'] === 'SUPER_ADMIN' || $user['role'] === 'ADMIN') {
-                    header('Location: admin/index.php');
-                    exit;
-                } elseif ($user['role'] === 'ORG_ADMIN') {
-                    header('Location: index.php');
-                    exit;
-                } else {
-                    $login_error = 'Your role (' . htmlspecialchars($user['role']) . ') is not correct to access this system. Only ORG_ADMIN can access the main dashboard.';
-                }
-            } else {
-                $login_error = 'Your account is inactive. Please contact administrator.';
-            }
-        } else {
-            $login_error = 'Invalid username or password.';
-        }
-    } else {
-        $login_error = 'Invalid username or password.';
-    }
-    
-    $stmt->close();
-}
+$login_error = fdss_process_login($conn);
 ?>
 <!DOCTYPE html>
 <html lang="en">
